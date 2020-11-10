@@ -18,6 +18,7 @@ package mediaserver
 
 import (
 	"github.com/op/go-logging"
+	"github.com/segmentio/ksuid"
 	"os"
 )
 
@@ -46,4 +47,9 @@ func CreateLogger(module string, logfile string, loglevel string) (log *logging.
 	logging.SetBackend(backendLeveled)
 
 	return
+}
+
+func UniqueId() string {
+	id := ksuid.New()
+	return id.String()
 }
