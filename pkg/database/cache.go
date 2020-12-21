@@ -1,7 +1,7 @@
 package database
 
 type Cache struct {
-	db       *Database         `json:"-"`
+	db       *MediaDatabase    `json:"-"`
 	Id       string            `json:"id"`
 	MasterId string            `json:"masterid"`
 	Action   string            `json:"action"`

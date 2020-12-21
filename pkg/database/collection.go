@@ -1,55 +1,38 @@
 package database
 
-import (
-	"encoding/json"
-	"fmt"
-	"github.com/dgraph-io/badger/v2"
-	"github.com/goph/emperror"
-)
+import "fmt"
 
 type Collection struct {
-	db          *Database `json:"-"`
-	Id          string    `json:"id"`
-	EstateId    string    `json:"estateid"`
-	StorageId   string    `json:"storageid"`
-	Name        string    `json:"string"`
-	Description string    `json:"description,omitempty"`
-	ZoteroGroup int64     `json:"zoterogroup,omitempty"`
+	db          *MediaDatabase `json:"-"`
+	Id          int64          `json:"id"`
+	EstateId    int64          `json:"estateid"`
+	StorageId   int64          `json:"storageid"`
+	Estate      *Estate        `json:"-"`
+	Storage     *Storage       `json:"-"`
+	Name        string         `json:"string"`
+	Description string         `json:"description,omitempty"`
+	ZoteroGroup int64          `json:"zoterogroup,omitempty"`
 }
 
-func NewCollection(id, estateId, name, description string, zoteroGroup int64) *Collection {
+func NewCollection(mdb *MediaDatabase, id int64, storageid, estateid int64, name, description string, zoteroGroup int64) (*Collection, error) {
+	storage, ok := mdb.storages[storageid]
+	if !ok {
+		return nil, fmt.Errorf("cannot find storage with id %v for collection [%v] %s", storageid, id, name)
+	}
+	estate, ok := mdb.estates[estateid]
+	if !ok {
+		return nil, fmt.Errorf("cannot find estate with id %v for collection [%v] %s", estateid, id, name)
+	}
 	coll := &Collection{
+		db:          mdb,
 		Id:          id,
-		EstateId:    estateId,
+		Storage:     storage,
+		Estate:      estate,
+		StorageId:   storage.Id,
+		EstateId:    estate.Id,
 		Name:        name,
 		Description: description,
 		ZoteroGroup: zoteroGroup,
 	}
-	return coll
-}
-
-func (coll *Collection) GetKey() string {
-	return COLLECTION_PREFIX + coll.Id
-}
-
-func (coll *Collection) AddMaster(mas *Master) (*Master, error) {
-	key := mas.GetKey()
-	_, err := mas.db.db.NewTransaction(false).Get([]byte(key))
-	if err != nil {
-		if err != badger.ErrKeyNotFound {
-			return nil, emperror.Wrapf(err, "error checking for key %s", key)
-		}
-	} else {
-		return nil, fmt.Errorf("key %s already in database", key)
-	}
-	mas.db = mas.db
-	mas.CollectionId = coll.Id
-	jsonbytes, err := json.Marshal(mas)
-	if err != nil {
-		return nil, emperror.Wrapf(err, "cannot marshal master %s", mas.Id)
-	}
-	if err := mas.db.db.NewTransaction(true).Set([]byte(key), jsonbytes); err != nil {
-		return nil, emperror.Wrapf(err, "cannot store master %s as %s", mas.Id, key)
-	}
-	return mas, nil
+	return coll, nil
 }

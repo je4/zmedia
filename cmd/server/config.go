@@ -41,6 +41,7 @@ type Cfg_database struct {
 }
 
 type Cfg_S3 struct {
+	Name            string `toml:"name"`
 	Endpoint        string `toml:"endpoint"`
 	AccessKeyId     string `toml:"accessKeyId"`
 	SecretAccessKey string `toml:"secretAccessKey"`
@@ -66,7 +67,7 @@ type Config struct {
 	StaticFolder       string       `toml:"staticfolder"`
 	DBOld              Cfg_database `toml:"dbold"`
 	DB                 Cfg_database `toml:"dbold"`
-	S3                 Cfg_S3       `toml:"s3"`
+	S3                 []Cfg_S3     `toml:"s3"`
 }
 
 func LoadConfig(fp string) Config {

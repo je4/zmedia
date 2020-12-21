@@ -29,7 +29,8 @@ staticfolder = "C:\\daten\\go\\dev\\zmedia\\web\\static"
     schema = "public"
 
 
-[s3]
+[[s3]]
+    name = "hgk"
     endpoint = "minio.campusderkuenste.ch"
     accessKeyId = "zotero"
     secretAccessKey = "zXbJKxnYZP708Ni84Lep"

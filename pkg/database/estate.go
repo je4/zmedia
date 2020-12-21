@@ -1,21 +1,18 @@
 package database
 
 type Estate struct {
-	db          *Database `json:"-"`
-	Id          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description,omitempty"`
+	db          *MediaDatabase `json:"-"`
+	Id          int64          `json:"id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
 }
 
-func NewEstate(id, name, description string) *Estate {
+func NewEstate(mdb *MediaDatabase, id int64, name, description string) (*Estate, error) {
 	estate := &Estate{
+		db:          mdb,
 		Id:          id,
 		Name:        name,
 		Description: description,
 	}
-	return estate
-}
-
-func (es *Estate) GetKey() string {
-	return ESTATE_PREFIX + es.Id
+	return estate, nil
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"github.com/je4/zmedia/v2/pkg/filesystem"
 	"github.com/je4/zmedia/v2/pkg/mediaserver"
 	"io"
 	"os"
@@ -31,6 +32,17 @@ func main() {
 		}
 		defer f.Close()
 		accesslog = f
+	}
+
+	var fss map[string]filesystem.FileSystem = make(map[string]filesystem.FileSystem)
+
+	for _, s3 := range config.S3 {
+		fs, err := filesystem.NewS3Fs(s3.Endpoint, s3.AccessKeyId, s3.SecretAccessKey, s3.UseSSL)
+		if err != nil {
+			log.Fatalf("cannot connect to s3 instance %v: %v", s3.Name, err)
+			return
+		}
+		fss[s3.Name] = fs
 	}
 
 	srv, err := mediaserver.NewServer(

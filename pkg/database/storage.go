@@ -1,26 +1,28 @@
 package database
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/dgraph-io/badger/v2"
 	"github.com/goph/emperror"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
+	"net/url"
+	"strings"
 )
 
 type Storage struct {
-	fs       filesystem.FileSystem `json:"-"`
-	db       *Database             `json:"-"`
-	FSType   string                `json:"fstype"`
-	Id       string                `json:"id"`
-	Name     string                `json:"name"`
-	Filebase string                `json:"filebase"`
-	DataDir  string                `json:"data"`
-	VideoDir string                `json:"video"`
-	TempDir  string                `json:"temp"`
+	fs           filesystem.FileSystem `json:"-"`
+	db           *MediaDatabase        `json:"-"`
+	FSType       string                `json:"fstype"`
+	Id           int64                 `json:"id"`
+	Name         string                `json:"name"`
+	Filebase     string                `json:"filebase"`
+	DataDir      string                `json:"data"`
+	VideoDir     string                `json:"video"`
+	SubmasterDir string                `json:"submasterdir"`
+	TempDir      string                `json:"temp"`
+	JWTKey       string                `json:"jwtkey"`
 }
 
-func NewStorage(fs filesystem.FileSystem, id, name, filebase, datadir, videodir, tempdir string) (*Storage, error) {
+func NewStorage(mdb *MediaDatabase, id int64, name, filebase, datadir, videodir, submasterdir, tempdir, jwtkey string) (*Storage, error) {
 	if datadir == "" {
 		datadir = "data"
 	}
@@ -31,46 +33,34 @@ func NewStorage(fs filesystem.FileSystem, id, name, filebase, datadir, videodir,
 		tempdir = "temp"
 	}
 
+	urlbase, err := url.Parse(filebase)
+	if err != nil {
+		return nil, emperror.Wrapf(err, "invalid URL for storage [%v] %s - %s", id, name, filebase)
+	}
+	if strings.ToLower(urlbase.Scheme) != "fs" {
+		return nil, fmt.Errorf("invalid scheme for filesystem %s", filebase)
+	}
+	fs, ok := mdb.fss[strings.ToLower(urlbase.Host)]
+	if !ok {
+		return nil, fmt.Errorf("unknown filesystem %s", filebase)
+	}
+
 	if err := fs.FolderCreate(filebase, filesystem.FolderCreateOptions{}); err != nil {
 		return nil, emperror.Wrapf(err, "cannot create folder %s", filebase)
 	}
 
 	stor := &Storage{
-		fs:       fs,
-		Id:       id,
-		FSType:   fs.String(),
-		Name:     name,
-		Filebase: filebase,
-		DataDir:  datadir,
-		VideoDir: videodir,
-		TempDir:  tempdir,
+		db:           mdb,
+		fs:           fs,
+		Id:           id,
+		FSType:       fs.String(),
+		Name:         name,
+		Filebase:     filebase,
+		DataDir:      datadir,
+		VideoDir:     videodir,
+		SubmasterDir: submasterdir,
+		TempDir:      tempdir,
+		JWTKey:       jwtkey,
 	}
 	return stor, nil
-}
-
-func (stor *Storage) GetKey() string {
-	return STORAGE_PREFIX + stor.Id
-}
-
-func (stor *Storage) AddCollection(coll *Collection) error {
-	key := coll.GetKey()
-	_, err := stor.db.db.NewTransaction(false).Get([]byte(key))
-	if err != nil {
-		if err != badger.ErrKeyNotFound {
-			return emperror.Wrapf(err, "error checking for key %s", key)
-		}
-	} else {
-		return fmt.Errorf("key %s already in database", key)
-	}
-	coll.db = stor.db
-	coll.StorageId = stor.Id
-	jsonbytes, err := json.Marshal(coll)
-	if err != nil {
-		return emperror.Wrapf(err, "cannot marshal collection %s", coll.Id)
-	}
-	if err := stor.db.db.NewTransaction(true).Set([]byte(key), jsonbytes); err != nil {
-		return emperror.Wrapf(err, "cannot store collection %s as %s", coll.Id, key)
-	}
-	stor.db.collections[coll.Id] = coll
-	return nil
 }
