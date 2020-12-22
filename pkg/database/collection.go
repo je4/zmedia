@@ -1,33 +1,23 @@
 package database
 
-import "fmt"
-
 type Collection struct {
 	db          *MediaDatabase `json:"-"`
+	estate      *Estate        `json:"-"`
+	storage     *Storage       `json:"-"`
 	Id          int64          `json:"id"`
 	EstateId    int64          `json:"estateid"`
 	StorageId   int64          `json:"storageid"`
-	Estate      *Estate        `json:"-"`
-	Storage     *Storage       `json:"-"`
 	Name        string         `json:"string"`
 	Description string         `json:"description,omitempty"`
 	ZoteroGroup int64          `json:"zoterogroup,omitempty"`
 }
 
-func NewCollection(mdb *MediaDatabase, id int64, storageid, estateid int64, name, description string, zoteroGroup int64) (*Collection, error) {
-	storage, ok := mdb.storages[storageid]
-	if !ok {
-		return nil, fmt.Errorf("cannot find storage with id %v for collection [%v] %s", storageid, id, name)
-	}
-	estate, ok := mdb.estates[estateid]
-	if !ok {
-		return nil, fmt.Errorf("cannot find estate with id %v for collection [%v] %s", estateid, id, name)
-	}
+func NewCollection(mdb *MediaDatabase, id int64, storage *Storage, estate *Estate, name, description string, zoteroGroup int64) (*Collection, error) {
 	coll := &Collection{
 		db:          mdb,
 		Id:          id,
-		Storage:     storage,
-		Estate:      estate,
+		storage:     storage,
+		estate:      estate,
 		StorageId:   storage.Id,
 		EstateId:    estate.Id,
 		Name:        name,
@@ -35,4 +25,34 @@ func NewCollection(mdb *MediaDatabase, id int64, storageid, estateid int64, name
 		ZoteroGroup: zoteroGroup,
 	}
 	return coll, nil
+}
+
+func (coll *Collection) GetStorage() (*Storage, error) {
+	if coll.storage == nil {
+		var err error
+		coll.storage, err = coll.db.GetStorageById(coll.StorageId)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return coll.storage, nil
+}
+
+func (coll *Collection) GetEstate() (*Estate, error) {
+	if coll.estate == nil {
+		var err error
+		coll.estate, err = coll.db.GetEstateById(coll.EstateId)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return coll.estate, nil
+}
+
+func (coll *Collection) GetMaster(signature string) (*Master, error) {
+	return coll.db.GetMaster(coll, signature)
+}
+
+func (coll *Collection) GetMasterById(masterid int64) (*Master, error) {
+	return coll.db.GetMasterById(coll, masterid)
 }

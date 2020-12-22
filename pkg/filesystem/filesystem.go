@@ -38,8 +38,8 @@ type FolderCreateOptions struct {
 }
 
 type FileSystem interface {
-	FolderExists(folder string) (bool, error)
-	FolderCreate(folder string, opts FolderCreateOptions) error
+	BucketExists(folder string) (bool, error)
+	BucketCreate(folder string, opts FolderCreateOptions) error
 	FileExists(folder, name string) (bool, error)
 	FileGet(folder, name string, opts FileGetOptions) ([]byte, error)
 	FilePut(folder, name string, data []byte, opts FilePutOptions) error

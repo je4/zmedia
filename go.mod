@@ -10,6 +10,8 @@ require (
 	github.com/goph/emperror v0.17.2
 	github.com/gorilla/handlers v1.5.1
 	github.com/gorilla/mux v1.8.0
+	github.com/gosimple/slug v1.9.0
+	github.com/lib/pq v1.9.0
 	github.com/lucas-clemente/quic-go v0.18.1
 	github.com/minio/minio-go/v7 v7.0.5
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7

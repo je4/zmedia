@@ -56,11 +56,11 @@ func (fs *LocalFs) FileExists(folder, name string) (bool, error) {
 	return FileExists(filepath.Join(fs.basepath, path)), nil
 }
 
-func (fs *LocalFs) FolderExists(folder string) (bool, error) {
+func (fs *LocalFs) BucketExists(folder string) (bool, error) {
 	return FolderExists(filepath.Join(fs.basepath, folder)), nil
 }
 
-func (fs *LocalFs) FolderCreate(folder string, opts FolderCreateOptions) error {
+func (fs *LocalFs) BucketCreate(folder string, opts FolderCreateOptions) error {
 	path := filepath.Join(fs.basepath, folder)
 	if FolderExists(path) {
 		return nil
@@ -83,7 +83,7 @@ func (fs *LocalFs) FileGet(folder, name string, opts FileGetOptions) ([]byte, er
 }
 
 func (fs *LocalFs) FilePut(folder, name string, data []byte, opts FilePutOptions) error {
-	if err := fs.FolderCreate(folder, FolderCreateOptions{}); err != nil {
+	if err := fs.BucketCreate(folder, FolderCreateOptions{}); err != nil {
 		return emperror.Wrapf(err, "cannot create folder %v", folder)
 	}
 	path := filepath.Join(fs.basepath, filepath.Join(folder, name))
@@ -95,7 +95,7 @@ func (fs *LocalFs) FilePut(folder, name string, data []byte, opts FilePutOptions
 }
 
 func (fs *LocalFs) FileWrite(folder, name string, r io.Reader, size int64, opts FilePutOptions) error {
-	if err := fs.FolderCreate(folder, FolderCreateOptions{}); err != nil {
+	if err := fs.BucketCreate(folder, FolderCreateOptions{}); err != nil {
 		return emperror.Wrapf(err, "cannot create folder %v", folder)
 	}
 	path := filepath.Join(folder, name)

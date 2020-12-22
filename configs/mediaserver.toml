@@ -24,7 +24,7 @@ staticfolder = "C:\\daten\\go\\dev\\zmedia\\web\\static"
 
 [db]
     servertype = "postgres"
-    dsn = "postgres://zotero:zZLOpCuHylgRATkCnNL0@localhost:5433/media"
+    dsn = "postgres://media:GPj2uO9avtGMJWXp@localhost:5433/media"
     connection_max = 5000
     schema = "public"
 
@@ -32,6 +32,6 @@ staticfolder = "C:\\daten\\go\\dev\\zmedia\\web\\static"
 [[s3]]
     name = "hgk"
     endpoint = "minio.campusderkuenste.ch"
-    accessKeyId = "zotero"
-    secretAccessKey = "zXbJKxnYZP708Ni84Lep"
+    accessKeyId = "media"
+    secretAccessKey = "DzqApK0rK7tRlbKlBG2JymDJeHvPMfOd"
     useSSL = true

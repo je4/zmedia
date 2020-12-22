@@ -66,7 +66,7 @@ type Config struct {
 	StaticPrefix       string       `toml:"staticprefix"`
 	StaticFolder       string       `toml:"staticfolder"`
 	DBOld              Cfg_database `toml:"dbold"`
-	DB                 Cfg_database `toml:"dbold"`
+	DB                 Cfg_database `toml:"db"`
 	S3                 []Cfg_S3     `toml:"s3"`
 }
 

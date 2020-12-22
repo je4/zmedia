@@ -67,7 +67,7 @@ func (fs *S3Fs) FileExists(folder, name string) (bool, error) {
 	return true, nil
 }
 
-func (fs *S3Fs) FolderExists(folder string) (bool, error) {
+func (fs *S3Fs) BucketExists(folder string) (bool, error) {
 	found, err := fs.s3.BucketExists(context.Background(), folder)
 	if err != nil {
 		return false, emperror.Wrapf(err, "cannot get check for folder %v", folder)
@@ -75,7 +75,7 @@ func (fs *S3Fs) FolderExists(folder string) (bool, error) {
 	return found, nil
 }
 
-func (fs *S3Fs) FolderCreate(folder string, opts FolderCreateOptions) error {
+func (fs *S3Fs) BucketCreate(folder string, opts FolderCreateOptions) error {
 	if err := fs.s3.MakeBucket(context.Background(), folder, minio.MakeBucketOptions{ObjectLocking: opts.ObjectLocking}); err != nil {
 		return emperror.Wrapf(err, "cannot create bucket %s", folder)
 	}

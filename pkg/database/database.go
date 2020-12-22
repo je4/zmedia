@@ -1,8 +1,23 @@
 package database
 
 type Database interface {
-	LoadEstates(mdb *MediaDatabase, callback func(estate *Estate) error) error
-	LoadStorages(callback func(storage *Storage) error) error
-	LoadCollections(mdb *MediaDatabase, callback func(storage *Collection) error) error
-	GetMaster(collection *Collection, signature string) (*Master, error)
+	GetStorages(mdb *MediaDatabase, callback func(storage *Storage) error) error
+	GetStorageById(mdb *MediaDatabase, storageid int64) (*Storage, error)
+	GetStorageByName(mdb *MediaDatabase, name string) (*Storage, error)
+	CreateStorage(mdb *MediaDatabase, name string, fsname, jwtKey string) (*Storage, error)
+
+	GetEstates(mdb *MediaDatabase, callback func(estate *Estate) error) error
+	GetEstateById(mdb *MediaDatabase, EstateID int64) (*Estate, error)
+	GetEstateByName(mdb *MediaDatabase, Name string) (*Estate, error)
+	CreateEstate(mdb *MediaDatabase, name, description string) (*Estate, error)
+
+	GetCollections(mdb *MediaDatabase, callback func(storage *Collection) error) error
+	GetCollectionById(mdb *MediaDatabase, CollectionId int64) (*Collection, error)
+	GetCollectionByName(mdb *MediaDatabase, Name string) (*Collection, error)
+	CreateCollection(db *MediaDatabase, name string, estate *Estate, storage *Storage, signature_prefix, description string, zoterogroup int64) (*Collection, error)
+
+	GetMaster(mdb *MediaDatabase, collection *Collection, signature string) (*Master, error)
+	GetMasterById(mdb *MediaDatabase, collection *Collection, masterid int64) (*Master, error)
+
+	GetCache(mdb *MediaDatabase, master *Master, action string, paramstr string) (*Cache, error)
 }

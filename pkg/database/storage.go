@@ -45,10 +45,6 @@ func NewStorage(mdb *MediaDatabase, id int64, name, filebase, datadir, videodir,
 		return nil, fmt.Errorf("unknown filesystem %s", filebase)
 	}
 
-	if err := fs.FolderCreate(filebase, filesystem.FolderCreateOptions{}); err != nil {
-		return nil, emperror.Wrapf(err, "cannot create folder %s", filebase)
-	}
-
 	stor := &Storage{
 		db:           mdb,
 		fs:           fs,
