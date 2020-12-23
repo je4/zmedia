@@ -4,8 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"flag"
-	"github.com/je4/zmedia/v2/pkg/database"
+	"github.com/davidbyttow/govips/v2/vips"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
+	"github.com/je4/zmedia/v2/pkg/media"
 	"github.com/je4/zmedia/v2/pkg/mediaserver"
 	_ "github.com/lib/pq"
 	"io"
@@ -30,7 +31,7 @@ func main() {
 	} else {
 		f, err := os.OpenFile(config.AccessLog, os.O_WRONLY|os.O_CREATE, 0755)
 		if err != nil {
-			log.Panicf("cannot open file %s: %v", config.AccessLog, err)
+			log.Errorf("cannot open file %s: %v", config.AccessLog, err)
 			return
 		}
 		defer f.Close()
@@ -42,7 +43,7 @@ func main() {
 	for _, s3 := range config.S3 {
 		fs, err := filesystem.NewS3Fs(s3.Endpoint, s3.AccessKeyId, s3.SecretAccessKey, s3.UseSSL)
 		if err != nil {
-			log.Fatalf("cannot connect to s3 instance %v: %v", s3.Name, err)
+			log.Errorf("cannot connect to s3 instance %v: %v", s3.Name, err)
 			return
 		}
 		fss[s3.Name] = fs
@@ -51,54 +52,90 @@ func main() {
 	// get database connection handle
 	db, err := sql.Open(config.DB.ServerType, config.DB.DSN)
 	if err != nil {
-		log.Fatalf("error opening database: %v", err)
+		log.Errorf("error opening database: %v", err)
+		return
 	}
 	defer db.Close()
 
 	// Open doesn't open a connection. Validate DSN data:
 	err = db.Ping()
 	if err != nil {
-		log.Fatalf("error pinging database: %v", err)
-	}
-
-	pgdb, err := database.NewPostgresDB(db, "public", log)
-	if err != nil {
-		log.Panicf("cannot create postgres database layer: %v", err)
+		log.Errorf("error pinging database: %v", err)
 		return
 	}
 
-	mediadb, err := database.NewMediaDatabase(pgdb, fss)
+	/*
+		pgdb, err := database.NewPostgresDB(db, "public", log)
+		if err != nil {
+			log.Errorf("cannot create postgres database layer: %v", err)
+			return
+		}
+
+		mediadb, err := database.NewMediaDatabase(pgdb, fss)
+		if err != nil {
+			log.Errorf("cannot create mediaserver database layer: %v", err)
+			return
+		}
+	*/
+
+	/*
+		_, err = mediadb.GetEstateByName("mediathek")
+		//_, err = mediadb.CreateEstate("mediathek", "Mediathek HGK")
+		if err != nil {
+			log.Errorf("cannot create storage: %v", err)
+			return
+		}
+
+		//_, err = mediadb.CreateStorage("test", "hgk", "")
+		_, err = mediadb.GetStorageByName("test")
+		if err != nil {
+			log.Errorf("cannot get storage: %v", err)
+			return
+		}
+
+		//_, err = mediadb.CreateCollection("test", est, stor, "test-", "testing 123", 0)
+		coll, err := mediadb.GetCollectionByName("test")
+		if err != nil {
+			log.Errorf("cannot create collection: %v", err)
+			return
+		}
+		coll, err = mediadb.GetCollectionByName("test")
+		if err != nil {
+			log.Errorf("cannot create collection: %v", err)
+			return
+		}
+		log.Infof("Collection #%d - %s", coll.Id, coll.Name)
+
+	*/
+	vips.Startup(nil)
+	defer vips.Shutdown()
+
+	imageType, _ := media.NewImageType()
+
+	readfile := "c:/temp/test3.png"
+	rp, err := os.OpenFile(readfile, os.O_RDONLY, 0644)
 	if err != nil {
-		log.Panicf("cannot create mediaserver database layer: %v", err)
+		log.Errorf("cannot open file %s", readfile)
+		return
+	}
+	defer rp.Close()
+	img, err := imageType.LoadImage(rp)
+	if err != nil {
+		log.Errorf("cannot read image: %v", err)
 		return
 	}
 
-	_, err = mediadb.GetEstateByName("mediathek")
-	//_, err = mediadb.CreateEstate("mediathek", "Mediathek HGK")
+	writefile := "c:/temp/test3.webp"
+	wp, err := os.OpenFile(writefile, os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		log.Panicf("cannot create storage: %v", err)
+		log.Errorf("cannot open file %s", writefile)
 		return
 	}
+	defer wp.Close()
 
-	//_, err = mediadb.CreateStorage("test", "hgk", "")
-	_, err = mediadb.GetStorageByName("test")
-	if err != nil {
-		log.Panicf("cannot get storage: %v", err)
-		return
-	}
+	meta, err := imageType.StoreImage(img, "webp", wp)
 
-	//_, err = mediadb.CreateCollection("test", est, stor, "test-", "testing 123", 0)
-	coll, err := mediadb.GetCollectionByName("test")
-	if err != nil {
-		log.Panicf("cannot create collection: %v", err)
-		return
-	}
-	coll, err = mediadb.GetCollectionByName("test")
-	if err != nil {
-		log.Panicf("cannot create collection: %v", err)
-		return
-	}
-	log.Infof("Collection #%d - %s", coll.Id, coll.Name)
+	log.Infof("meta: %v", meta)
 
 	return
 

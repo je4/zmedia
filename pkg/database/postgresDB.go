@@ -387,7 +387,7 @@ func (db *PostgresDB) GetCache(mdb *MediaDatabase, master *Master, action string
 		return nil, emperror.Wrapf(err, "cannot get collection from master #%v.%v", master.CollectionId, master.Id)
 	}
 
-	sqlstr := fmt.Sprintf("SELECT cacheid, storageid, width, height, duration, mimetype, filesize, path FROM %s.cache WHERE masterid=$1, action=$2, param=$3", db.schema)
+	sqlstr := fmt.Sprintf("SELECT cacheid, storageid, collectionid, width, height, duration, mimetype, filesize, path FROM %s.cache WHERE masterid=$1, action=$2, param=$3", db.schema)
 	sqlparams := []interface{}{
 		master.Id,
 		action,
@@ -395,12 +395,12 @@ func (db *PostgresDB) GetCache(mdb *MediaDatabase, master *Master, action string
 	}
 	db.logger.Debugf("SQL: %s - %v", sqlstr, sqlparams)
 	row := db.db.QueryRow(sqlstr, sqlparams...)
-	var CacheId, StorageId int64
+	var CacheId, StorageId, CollectionId int64
 	var Width, Height, Duration int64
 	var Mimetype string
 	var Filesize int64
 	var Path string
-	switch err := row.Scan(&CacheId, &StorageId, &Width, &Height, &Duration, &Mimetype, &Filesize, &Path); err {
+	switch err := row.Scan(&CacheId, &StorageId, &CollectionId, &Width, &Height, &Duration, &Mimetype, &Filesize, &Path); err {
 	case sql.ErrNoRows:
 		return nil, fmt.Errorf("cache %s/%s/%s/%s does not exist", coll.Name, master.Signature, action, paramstr)
 	case nil:
@@ -408,7 +408,7 @@ func (db *PostgresDB) GetCache(mdb *MediaDatabase, master *Master, action string
 	default:
 		return nil, fmt.Errorf("cannot get cache %s/%s/%s/%s", coll.Name, master.Signature, action, paramstr)
 	}
-	cache, err := NewCache(mdb, CacheId, master.Id, action, paramstr, Mimetype, Filesize, Path, Width, Height, Duration)
+	cache, err := NewCache(mdb, CacheId, CollectionId, master.Id, action, paramstr, Mimetype, Filesize, Path, Width, Height, Duration)
 	if err != nil {
 		return nil, emperror.Wrapf(err, "cannot instantiate cache %s/%s/%s/%s", coll.Name, master.Signature, action, paramstr)
 	}
