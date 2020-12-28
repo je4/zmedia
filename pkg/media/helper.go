@@ -12,3 +12,20 @@ func FindStringSubmatch(exp *regexp.Regexp, str string) map[string]string {
 	}
 	return result
 }
+
+func CalcSize(origWidth, origHeight, Width, Height int) (width int, height int) {
+	//    oW    W
+	//    -- = --
+	//    oH    H
+	origAspect := float64(origWidth) / float64(origHeight)
+	newAspect := float64(Width) / float64(Height)
+
+	if origAspect < newAspect {
+		height = Height
+		width = (Height * origWidth) / origHeight
+	} else {
+		width = Width
+		height = (Width * origHeight) / origWidth
+	}
+	return
+}

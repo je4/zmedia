@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/goph/emperror"
 	"io"
-	"regexp"
 	"strings"
 )
 
@@ -26,7 +25,15 @@ func (ia *ImageAction) Do(meta *CoreMeta, action string, params []string, reader
 
 	switch action {
 	case "resize":
-
+		if err := it.Resize(params); err != nil {
+			return nil, emperror.Wrapf(err, "cannot resize image - %v", params)
+		}
+	default:
+		return nil, fmt.Errorf("invalid action %s", action)
 	}
-
+	cm, err := it.StoreImage(writer)
+	if err != nil {
+		return nil, emperror.Wrapf(err, "cannot store image")
+	}
+	return cm, nil
 }

@@ -1,9 +1,10 @@
 package media
 
 import (
+	"bytes"
 	"fmt"
-	"github.com/davidbyttow/govips/v2/vips"
 	"github.com/goph/emperror"
+	"github.com/h2non/bimg"
 	"io"
 	"math"
 	"regexp"
@@ -12,7 +13,9 @@ import (
 )
 
 type ImageType struct {
-	image *vips.ImageRef
+	image *bimg.Image
+	buf   []byte
+	meta  bimg.ImageMetadata
 }
 
 func NewImageType(reader io.Reader) (*ImageType, error) {
@@ -25,13 +28,16 @@ func NewImageType(reader io.Reader) (*ImageType, error) {
 
 var resizeImageParamRegexp = regexp.MustCompile(`^(size(?P<sizeWidth>[0-9]*)x(?P<sizeHeight>[0-9]*))|(?P<resizeType>(keep|stretch|crop|backgroundblur))|(format(?P<format>jpeg|webp|png|gif|ptiff|jpeg2000))$`)
 
-func (it *ImageType) resize(params []string) (err error) {
+func (it *ImageType) Resize(params []string) (err error) {
 	var Width, Height int64
 	var Type string = "keep"
 	var Format string
 	for _, param := range params {
 		vals := FindStringSubmatch(resizeImageParamRegexp, strings.ToLower(param))
 		for key, val := range vals {
+			if val == "" {
+				continue
+			}
 			switch key {
 			case "sizeWidth":
 				if Width, err = strconv.ParseInt(val, 10, 64); err != nil {
@@ -53,109 +59,141 @@ func (it *ImageType) resize(params []string) (err error) {
 	// calculate missing size parameter
 	//
 	if Width == 0 && Height == 0 {
-		Width = int64(it.image.Width())
-		Height = int64(it.image.Height())
+		Width = int64(it.meta.Size.Width)
+		Height = int64(it.meta.Size.Height)
 	}
 	if Width == 0 {
-		Width = int64(math.Round(float64(Height) * float64(it.image.Width()) / float64(it.image.Height())))
+		Width = int64(math.Round(float64(Height) * float64(it.meta.Size.Height) / float64(it.meta.Size.Height)))
 	}
 	if Height == 0 {
-		Height = int64(math.Round(float64(Width) * float64(it.image.Height()) / float64(it.image.Width())))
+		Height = int64(math.Round(float64(Width) * float64(it.meta.Size.Width) / float64(it.meta.Size.Width)))
 	}
 
-	hScale := float64(Width) / float64(it.image.Width())
-	vScale := float64(Height) / float64(it.image.Height())
-	var scale float64
+	var options bimg.Options
+
+	switch Format {
+	case "jpeg":
+		options.Type = bimg.JPEG
+	case "png":
+		options.Type = bimg.PNG
+	case "webp":
+		options.Type = bimg.WEBP
+	case "ptiff":
+		options.Type = bimg.TIFF
+	default:
+		return fmt.Errorf("invalid format %s", Format)
+	}
 
 	switch Type {
 	case "keep":
-		scale = math.Min(hScale, vScale)
-		if err := it.image.Resize(scale, vips.KernelAuto); err != nil {
-			return emperror.Wrapf(err, "cannot resize(%v)", scale)
-		}
+		w, h := CalcSize(it.meta.Size.Width, it.meta.Size.Height, int(Width), int(Height))
+		options.Width = w
+		options.Height = h
+		options.Embed = true
 	case "stretch":
-		if it.image.ResizeWithVScale(hScale, vScale, vips.KernelAuto); err != nil {
-			return emperror.Wrapf(err, "cannot resize(%v, %v)", hScale, vScale)
-		}
+		options.Width = int(Width)
+		options.Height = int(Height)
+		options.Force = true
 	case "crop":
-		scale = math.Max(hScale, vScale)
-		if err := it.image.Resize(scale, vips.KernelAuto); err != nil {
-			return emperror.Wrapf(err, "cannot resize(%v)", scale)
+		w, h := CalcSize(it.meta.Size.Width, it.meta.Size.Height, int(Width), int(Height))
+		options.Width = w
+		options.Height = h
+		options.Embed = true
+		options.Crop = true
+	case "backgroundblur":
+		options.Width = int(Width)
+		options.Height = int(Height)
+		options.Force = true
+		options.GaussianBlur = bimg.GaussianBlur{Sigma: 10}
+
+		foreground := bimg.NewImage(it.buf)
+		w, h := CalcSize(it.meta.Size.Width, it.meta.Size.Height, int(Width), int(Height))
+		fgOptions := bimg.Options{
+			Height: h,
+			Width:  w,
+			Embed:  true,
 		}
-		l := (it.image.Width() - int(Width)) / 2
-		t := (it.image.Height() - int(Height)) / 2
-		if err := it.image.ExtractArea(l, t, int(Width), int(Height)); err != nil {
-			return emperror.Wrapf(err, "cannot extract(%v, %v, %v, %v)", l, t, int(Width), int(Height))
-		}
-	case "backgroundBlur":
-		foreground, err := it.image.Copy()
+		foregroundBytes, err := foreground.Process(fgOptions)
 		if err != nil {
-			return emperror.Wrap(err, "cannot copy image")
+			return emperror.Wrapf(err, "cannot resize(%v, %v)", int(Width), int(Height))
 		}
-		scale = math.Min(hScale, vScale)
-		if err := foreground.Resize(scale, vips.KernelAuto); err != nil {
-			return emperror.Wrapf(err, "cannot resize(%v)", scale)
+		foregroundMeta, err := foreground.Metadata()
+		if err != nil {
+			return emperror.Wrap(err, "cannot get metadata from foreground image")
 		}
-		if err := it.image.GaussianBlur(10); err != nil {
-			return emperror.Wrapf(err, "cannot gaussianblur(%v)", 10)
-		}
-		if err := it.image.BandJoin(foreground); err != nil {
-			return emperror.Wrap(err, "cannot bandjoin() images")
+		options.WatermarkImage = bimg.WatermarkImage{
+			Left:    (int(Width) - foregroundMeta.Size.Width) / 2,
+			Top:     (int(Height) - foregroundMeta.Size.Height) / 2,
+			Buf:     foregroundBytes,
+			Opacity: 0,
 		}
 
 	}
 
-	if Type == "keep" {
-
+	if it.buf, err = it.image.Process(options); err != nil {
+		return emperror.Wrapf(err, "cannot process image - %v", options)
 	}
-
-	it.image.ResizeWithVScale()
-
+	it.image = bimg.NewImage(it.buf)
+	if it.meta, err = it.image.Metadata(); err != nil {
+		return emperror.Wrapf(err, "cannot get final metadata")
+	}
 	return nil
 }
 
 func (it *ImageType) LoadImage(reader io.Reader) error {
 	var err error
-	it.image, err = vips.NewImageFromReader(reader)
-	if err != nil {
-		return emperror.Wrapf(err, "cannot read image")
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(reader); err != nil {
+		return emperror.Wrapf(err, "cannot read image content")
 	}
+	it.buf = buf.Bytes()
+	it.image = bimg.NewImage(it.buf)
+	if it.meta, err = it.image.Metadata(); err != nil {
+		return emperror.Wrap(err, "cannot get metadata from image")
+	}
+
 	return nil
 }
 
-func (it *ImageType) StoreImage(format string, writer io.Writer) (*CoreMeta, error) {
-	var ep *vips.ExportParams
-	var mimetype string
-	switch format {
-	case "jpeg":
-		ep = vips.NewDefaultJPEGExportParams()
-		mimetype = "image/jpeg"
-	case "png":
-		ep = vips.NewDefaultPNGExportParams()
-		mimetype = "image/png"
-	case "webp":
-		ep = vips.NewDefaultWEBPExportParams()
-		mimetype = "image/webp"
-	default:
-		return nil, fmt.Errorf("invalid format %s", format)
-	}
-	bytes, meta, err := it.image.Export(ep)
-	if err != nil {
-		return nil, emperror.Wrapf(err, "cannot export to %s", format)
-	}
-	num, err := writer.Write(bytes)
+func (it *ImageType) StoreImage(writer io.Writer) (*CoreMeta, error) {
+	num, err := writer.Write(it.buf)
 	if err != nil {
 		return nil, emperror.Wrapf(err, "cannot write data")
 	}
 	if num == 0 {
 		return nil, fmt.Errorf("zero bytes written")
 	}
+
 	cm := &CoreMeta{
-		Width:    int64(meta.Width),
-		Height:   int64(meta.Height),
+		Width:    int64(it.meta.Size.Width),
+		Height:   int64(it.meta.Size.Height),
 		Duration: 0,
-		Format:   format,
-		Mimetype: mimetype,
+		Format:   it.meta.Type,
 	}
+
+	switch it.meta.Type {
+	case "jpeg":
+		cm.Mimetype = "image/jpeg"
+	case "png":
+		cm.Mimetype = "image/png"
+	case "webp":
+		cm.Mimetype = "image/webp"
+	case "tiff":
+		cm.Mimetype = "image/tigg"
+	case "gif":
+		cm.Mimetype = "image/gif"
+	case "pdf":
+		cm.Mimetype = "application/pdf"
+	case "svg":
+		cm.Mimetype = "image/svg"
+		//	case "magick":
+	case "heif":
+		cm.Mimetype = "image/heif"
+	case "avif":
+		cm.Mimetype = "image/avif"
+	default:
+		return nil, fmt.Errorf("invalid image type %s", it.meta.Type)
+	}
+
 	return cm, nil
 }

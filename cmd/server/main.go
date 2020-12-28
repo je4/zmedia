@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"flag"
-	"github.com/davidbyttow/govips/v2/vips"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
 	"github.com/je4/zmedia/v2/pkg/media"
 	"github.com/je4/zmedia/v2/pkg/mediaserver"
@@ -107,33 +106,41 @@ func main() {
 		log.Infof("Collection #%d - %s", coll.Id, coll.Name)
 
 	*/
-	vips.Startup(nil)
-	defer vips.Shutdown()
 
-	imageType, _ := media.NewImageType()
-
-	readfile := "c:/temp/test3.png"
+	readfile := "c:/temp/pferd.jpg"
 	rp, err := os.OpenFile(readfile, os.O_RDONLY, 0644)
 	if err != nil {
 		log.Errorf("cannot open file %s", readfile)
 		return
 	}
 	defer rp.Close()
-	img, err := imageType.LoadImage(rp)
+	img, err := media.NewImageType(rp)
 	if err != nil {
 		log.Errorf("cannot read image: %v", err)
 		return
 	}
 
+	if err := img.Resize([]string{
+		"size300x900",
+		"formatWEBP",
+		"backgroundblur",
+	}); err != nil {
+		log.Errorf("cannot resize: %v", err)
+	}
+
 	writefile := "c:/temp/test3.webp"
 	wp, err := os.OpenFile(writefile, os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		log.Errorf("cannot open file %s", writefile)
+		log.Errorf("cannot open file %s: %v", writefile, err)
 		return
 	}
 	defer wp.Close()
 
-	meta, err := imageType.StoreImage(img, "webp", wp)
+	meta, err := img.StoreImage(wp)
+	if err != nil {
+		log.Errorf("cannot store image %s: %v", writefile, err)
+		return
+	}
 
 	log.Infof("meta: %v", meta)
 
