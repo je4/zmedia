@@ -11,6 +11,7 @@ require (
 	github.com/gorilla/handlers v1.5.1
 	github.com/gorilla/mux v1.8.0
 	github.com/gosimple/slug v1.9.0
+	github.com/h2non/bimg v1.1.5
 	github.com/lib/pq v1.9.0
 	github.com/lucas-clemente/quic-go v0.18.1
 	github.com/minio/minio-go/v7 v7.0.5
