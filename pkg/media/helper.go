@@ -13,7 +13,7 @@ func FindStringSubmatch(exp *regexp.Regexp, str string) map[string]string {
 	return result
 }
 
-func CalcSize(origWidth, origHeight, Width, Height int) (width int, height int) {
+func CalcSize(origWidth, origHeight, Width, Height int64) (width int64, height int64) {
 	//    oW    W
 	//    -- = --
 	//    oH    H

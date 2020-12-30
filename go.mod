@@ -5,7 +5,7 @@ go 1.15
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/bluele/gcache v0.0.0-20190518031135-bc40bd653833
-	github.com/davidbyttow/govips/v2 v2.0.2
+	github.com/davidbyttow/govips/v2 v2.3.1
 	github.com/google/go-cmp v0.5.2 // indirect
 	github.com/goph/emperror v0.17.2
 	github.com/gorilla/handlers v1.5.1
@@ -19,4 +19,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/segmentio/ksuid v1.0.3
 	go.uber.org/multierr v1.6.0
+	gopkg.in/gographics/imagick.v2 v2.6.0
+	gopkg.in/gographics/imagick.v3 v3.3.0
 )

@@ -12,28 +12,28 @@ import (
 	"strings"
 )
 
-type ImageType struct {
+type ImageBimg struct {
 	image *bimg.Image
 	buf   []byte
 	meta  bimg.ImageMetadata
 }
 
-func NewImageType(reader io.Reader) (*ImageType, error) {
-	it := &ImageType{}
+func NewImageBimg(reader io.Reader) (*ImageBimg, error) {
+	it := &ImageBimg{}
 	if err := it.LoadImage(reader); err != nil {
 		return nil, err
 	}
 	return it, nil
 }
 
-var resizeImageParamRegexp = regexp.MustCompile(`^(size(?P<sizeWidth>[0-9]*)x(?P<sizeHeight>[0-9]*))|(?P<resizeType>(keep|stretch|crop|backgroundblur))|(format(?P<format>jpeg|webp|png|gif|ptiff|jpeg2000))$`)
+var resizeImageBimgParamRegexp = regexp.MustCompile(`^(size(?P<sizeWidth>[0-9]*)x(?P<sizeHeight>[0-9]*))|(?P<resizeType>(keep|stretch|crop|backgroundblur))|(format(?P<format>jpeg|webp|png|gif|ptiff|jpeg2000))$`)
 
-func (it *ImageType) Resize(params []string) (err error) {
+func (ib *ImageBimg) Resize(params []string) (err error) {
 	var Width, Height int64
 	var Type string = "keep"
 	var Format string
 	for _, param := range params {
-		vals := FindStringSubmatch(resizeImageParamRegexp, strings.ToLower(param))
+		vals := FindStringSubmatch(resizeImageBimgParamRegexp, strings.ToLower(param))
 		for key, val := range vals {
 			if val == "" {
 				continue
@@ -59,14 +59,14 @@ func (it *ImageType) Resize(params []string) (err error) {
 	// calculate missing size parameter
 	//
 	if Width == 0 && Height == 0 {
-		Width = int64(it.meta.Size.Width)
-		Height = int64(it.meta.Size.Height)
+		Width = int64(ib.meta.Size.Width)
+		Height = int64(ib.meta.Size.Height)
 	}
 	if Width == 0 {
-		Width = int64(math.Round(float64(Height) * float64(it.meta.Size.Height) / float64(it.meta.Size.Height)))
+		Width = int64(math.Round(float64(Height) * float64(ib.meta.Size.Height) / float64(ib.meta.Size.Height)))
 	}
 	if Height == 0 {
-		Height = int64(math.Round(float64(Width) * float64(it.meta.Size.Width) / float64(it.meta.Size.Width)))
+		Height = int64(math.Round(float64(Width) * float64(ib.meta.Size.Width) / float64(ib.meta.Size.Width)))
 	}
 
 	var options bimg.Options
@@ -86,18 +86,18 @@ func (it *ImageType) Resize(params []string) (err error) {
 
 	switch Type {
 	case "keep":
-		w, h := CalcSize(it.meta.Size.Width, it.meta.Size.Height, int(Width), int(Height))
-		options.Width = w
-		options.Height = h
+		w, h := CalcSize(int64(ib.meta.Size.Width), int64(ib.meta.Size.Height), Width, Height)
+		options.Width = int(w)
+		options.Height = int(h)
 		options.Embed = true
 	case "stretch":
 		options.Width = int(Width)
 		options.Height = int(Height)
 		options.Force = true
 	case "crop":
-		w, h := CalcSize(it.meta.Size.Width, it.meta.Size.Height, int(Width), int(Height))
-		options.Width = w
-		options.Height = h
+		w, h := CalcSize(int64(ib.meta.Size.Width), int64(ib.meta.Size.Height), (Width), (Height))
+		options.Width = int(w)
+		options.Height = int(h)
 		options.Embed = true
 		options.Crop = true
 	case "backgroundblur":
@@ -106,11 +106,11 @@ func (it *ImageType) Resize(params []string) (err error) {
 		options.Force = true
 		options.GaussianBlur = bimg.GaussianBlur{Sigma: 10}
 
-		foreground := bimg.NewImage(it.buf)
-		w, h := CalcSize(it.meta.Size.Width, it.meta.Size.Height, int(Width), int(Height))
+		foreground := bimg.NewImage(ib.buf)
+		w, h := CalcSize(int64(ib.meta.Size.Width), int64(ib.meta.Size.Height), (Width), (Height))
 		fgOptions := bimg.Options{
-			Height: h,
-			Width:  w,
+			Height: int(h),
+			Width:  int(w),
 			Embed:  true,
 		}
 		foregroundBytes, err := foreground.Process(fgOptions)
@@ -130,33 +130,33 @@ func (it *ImageType) Resize(params []string) (err error) {
 
 	}
 
-	if it.buf, err = it.image.Process(options); err != nil {
+	if ib.buf, err = ib.image.Process(options); err != nil {
 		return emperror.Wrapf(err, "cannot process image - %v", options)
 	}
-	it.image = bimg.NewImage(it.buf)
-	if it.meta, err = it.image.Metadata(); err != nil {
+	ib.image = bimg.NewImage(ib.buf)
+	if ib.meta, err = ib.image.Metadata(); err != nil {
 		return emperror.Wrapf(err, "cannot get final metadata")
 	}
 	return nil
 }
 
-func (it *ImageType) LoadImage(reader io.Reader) error {
+func (ib *ImageBimg) LoadImage(reader io.Reader) error {
 	var err error
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(reader); err != nil {
 		return emperror.Wrapf(err, "cannot read image content")
 	}
-	it.buf = buf.Bytes()
-	it.image = bimg.NewImage(it.buf)
-	if it.meta, err = it.image.Metadata(); err != nil {
+	ib.buf = buf.Bytes()
+	ib.image = bimg.NewImage(ib.buf)
+	if ib.meta, err = ib.image.Metadata(); err != nil {
 		return emperror.Wrap(err, "cannot get metadata from image")
 	}
 
 	return nil
 }
 
-func (it *ImageType) StoreImage(writer io.Writer) (*CoreMeta, error) {
-	num, err := writer.Write(it.buf)
+func (ib *ImageBimg) StoreImage(writer io.Writer) (*CoreMeta, error) {
+	num, err := writer.Write(ib.buf)
 	if err != nil {
 		return nil, emperror.Wrapf(err, "cannot write data")
 	}
@@ -165,13 +165,13 @@ func (it *ImageType) StoreImage(writer io.Writer) (*CoreMeta, error) {
 	}
 
 	cm := &CoreMeta{
-		Width:    int64(it.meta.Size.Width),
-		Height:   int64(it.meta.Size.Height),
+		Width:    int64(ib.meta.Size.Width),
+		Height:   int64(ib.meta.Size.Height),
 		Duration: 0,
-		Format:   it.meta.Type,
+		Format:   ib.meta.Type,
 	}
 
-	switch it.meta.Type {
+	switch ib.meta.Type {
 	case "jpeg":
 		cm.Mimetype = "image/jpeg"
 	case "png":
@@ -192,7 +192,7 @@ func (it *ImageType) StoreImage(writer io.Writer) (*CoreMeta, error) {
 	case "avif":
 		cm.Mimetype = "image/avif"
 	default:
-		return nil, fmt.Errorf("invalid image type %s", it.meta.Type)
+		return nil, fmt.Errorf("invalid image type %s", ib.meta.Type)
 	}
 
 	return cm, nil

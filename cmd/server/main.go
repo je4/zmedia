@@ -107,28 +107,20 @@ func main() {
 
 	*/
 
-	readfile := "c:/temp/pferd.jpg"
+	var action media.Action
+
+	action, err = media.NewImageAction()
+	defer action.Close()
+
+	readfile := "web/static/pferd.jpg"
 	rp, err := os.OpenFile(readfile, os.O_RDONLY, 0644)
 	if err != nil {
 		log.Errorf("cannot open file %s", readfile)
 		return
 	}
 	defer rp.Close()
-	img, err := media.NewImageType(rp)
-	if err != nil {
-		log.Errorf("cannot read image: %v", err)
-		return
-	}
 
-	if err := img.Resize([]string{
-		"size300x900",
-		"formatWEBP",
-		"backgroundblur",
-	}); err != nil {
-		log.Errorf("cannot resize: %v", err)
-	}
-
-	writefile := "c:/temp/test3.webp"
+	writefile := "web/static/test3.webp"
 	wp, err := os.OpenFile(writefile, os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		log.Errorf("cannot open file %s: %v", writefile, err)
@@ -136,14 +128,23 @@ func main() {
 	}
 	defer wp.Close()
 
-	meta, err := img.StoreImage(wp)
+	cm, err := action.Do(&media.CoreMeta{
+		Width:    1600,
+		Height:   1200,
+		Duration: 0,
+		Format:   "jpeg",
+		Mimetype: "image/jpeg",
+	}, "resize", []string{
+		"size300x900",
+		"formatWEBP",
+		"backgroundblur",
+	}, rp, wp)
 	if err != nil {
-		log.Errorf("cannot store image %s: %v", writefile, err)
+		log.Errorf("cannot execute resize: %v", err)
 		return
 	}
 
-	log.Infof("meta: %v", meta)
-
+	log.Infof("result: %v", cm)
 	return
 
 	srv, err := mediaserver.NewServer(
