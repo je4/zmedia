@@ -7,8 +7,6 @@ import (
 	"io"
 	"math"
 	"regexp"
-	"strconv"
-	"strings"
 )
 
 type ImageVips struct {
@@ -27,56 +25,33 @@ var resizeImageVipsParamRegexp = regexp.MustCompile(`^(size(?P<sizeWidth>[0-9]*)
 
 func (it *ImageVips) Close() {}
 
-func (it *ImageVips) Resize(params []string) (err error) {
-	var Width, Height int64
-	var Type string = "keep"
-	//	var Format string
-	for _, param := range params {
-		vals := FindStringSubmatch(resizeImageVipsParamRegexp, strings.ToLower(param))
-		for key, val := range vals {
-			if val == "" {
-				continue
-			}
-			switch key {
-			case "sizeWidth":
-				if Width, err = strconv.ParseInt(val, 10, 64); err != nil {
-					return emperror.Wrapf(err, "cannot parse integer %s", val)
-				}
-			case "sizeHeight":
-				if Height, err = strconv.ParseInt(val, 10, 64); err != nil {
-					return emperror.Wrapf(err, "cannot parse integer %s", val)
-				}
-			case "resizeType":
-				Type = val
-			case "format":
-				//				Format = val
-			}
-		}
-	}
+func (im *ImageVips) GetType() string { return "image" }
+
+func (it *ImageVips) Resize(width, height int64, _type, format string) (err error) {
 
 	//
 	// calculate missing size parameter
 	//
-	if Width == 0 && Height == 0 {
-		Width = int64(it.image.Width())
-		Height = int64(it.image.Height())
+	if width == 0 && height == 0 {
+		width = int64(it.image.Width())
+		height = int64(it.image.Height())
 	}
-	if Width == 0 {
-		Width = int64(math.Round(float64(Height) * float64(it.image.Width()) / float64(it.image.Height())))
+	if width == 0 {
+		width = int64(math.Round(float64(height) * float64(it.image.Width()) / float64(it.image.Height())))
 	}
-	if Height == 0 {
-		Height = int64(math.Round(float64(Width) * float64(it.image.Height()) / float64(it.image.Width())))
+	if height == 0 {
+		height = int64(math.Round(float64(width) * float64(it.image.Height()) / float64(it.image.Width())))
 	}
 
 	if err := it.image.AutoRotate(); err != nil {
 		return emperror.Wrapf(err, "cannot autorotate image")
 	}
 
-	hScale := float64(Width) / float64(it.image.Width())
-	vScale := float64(Height) / float64(it.image.Height())
+	hScale := float64(width) / float64(it.image.Width())
+	vScale := float64(height) / float64(it.image.Height())
 	var scale float64
 
-	switch Type {
+	switch _type {
 	case "keep":
 		scale = math.Min(hScale, vScale)
 		if err := it.image.Resize(scale, vips.KernelAuto); err != nil {
@@ -91,48 +66,10 @@ func (it *ImageVips) Resize(params []string) (err error) {
 		if err := it.image.Resize(scale, vips.KernelAuto); err != nil {
 			return emperror.Wrapf(err, "cannot resize(%v)", scale)
 		}
-		l := (it.image.Width() - int(Width)) / 2
-		t := (it.image.Height() - int(Height)) / 2
-		if err := it.image.ExtractArea(l, t, int(Width), int(Height)); err != nil {
-			return emperror.Wrapf(err, "cannot extract(%v, %v, %v, %v)", l, t, int(Width), int(Height))
-		}
-	case "backgroundblur":
-		// copy image
-		/*
-				fgbytes, err := it.image.ToBytes()
-				if err != nil {
-					return emperror.Wrap(err, "cannot get image data")
-				}
-		//		foreground, err := vips.NewImageFromBuffer(fgbytes)
-
-		*/
-
-		foreground, err := it.image.Copy()
-		if err != nil {
-			return emperror.Wrap(err, "cannot create copy image")
-		}
-		scale = math.Min(hScale, vScale)
-		if err := foreground.Resize(scale, vips.KernelAuto); err != nil {
-			return emperror.Wrapf(err, "cannot resize(%v) foreground", scale)
-		}
-		if err := it.image.ResizeWithVScale(hScale, vScale, vips.KernelAuto); err != nil {
-			return emperror.Wrapf(err, "cannot resize(%v)", scale)
-		}
-
-		width := it.image.Width()
-		height := it.image.Height()
-		left := (width - foreground.Width()) / 2
-		top := (height - foreground.Height()) / 2
-		if err := foreground.Embed(left, top, width, height, vips.ExtendBackground); err != nil {
-			return emperror.Wrapf(err, "cannot resize(%v)", scale)
-		}
-		md := foreground.Metadata()
-		fmt.Printf("foreground: %v", md)
-		if err := it.image.GaussianBlur(10); err != nil {
-			return emperror.Wrapf(err, "cannot gaussianblur(%v)", 10)
-		}
-		if err := it.image.BandJoin(foreground); err != nil {
-			return emperror.Wrap(err, "cannot bandjoin() images")
+		l := (it.image.Width() - int(width)) / 2
+		t := (it.image.Height() - int(height)) / 2
+		if err := it.image.ExtractArea(l, t, int(width), int(height)); err != nil {
+			return emperror.Wrapf(err, "cannot extract(%v, %v, %v, %v)", l, t, int(width), int(height))
 		}
 	}
 

@@ -121,7 +121,8 @@ func main() {
 	defer rp.Close()
 
 	writefile := "web/static/test3.webp"
-	wp, err := os.OpenFile(writefile, os.O_CREATE|os.O_TRUNC, 0644)
+	//	writefile := "/tmp/test3.webp"
+	wp, err := os.OpenFile(writefile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Errorf("cannot open file %s: %v", writefile, err)
 		return
@@ -135,9 +136,9 @@ func main() {
 		Format:   "jpeg",
 		Mimetype: "image/jpeg",
 	}, "resize", []string{
-		"size300x900",
+		"size800x300",
 		"formatWEBP",
-		"backgroundblur",
+		"",
 	}, rp, wp)
 	if err != nil {
 		log.Errorf("cannot execute resize: %v", err)
