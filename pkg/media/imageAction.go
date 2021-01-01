@@ -19,8 +19,15 @@ func (ia *ImageAction) GetType() string {
 type ImageType interface {
 	LoadImage(reader io.Reader) error
 	StoreImage(format string, writer io.Writer) (*CoreMeta, error)
-	Resize(width, height int64, _type, format string) error
+	Resize(options *ImageOptions) error
 	Close()
+}
+
+type ImageOptions struct {
+	Width, Height                       int64
+	ActionType                          string
+	TargetFormat                        string
+	OverlayCollection, OverlaySignature string
 }
 
 func NewImageAction() (*ImageAction, error) {
@@ -37,12 +44,56 @@ func (ia *ImageAction) Close() {
 
 func (im *ImageMagickV3) GetType() string { return "image" }
 
-var resizeImageParamRegexp = regexp.MustCompile(`^(size(?P<sizeWidth>[0-9]*)x(?P<sizeHeight>[0-9]*))|(?P<resizeType>(keep|stretch|crop|backgroundblur))|(format(?P<format>jpeg|webp|png|gif|ptiff|jpeg2000))$`)
+var imageParamRegexp = regexp.MustCompile(fmt.Sprintf(`^%s$`, strings.Join([]string{
+	`(size(?P<sizeWidth>[0-9]*)x(?P<sizeHeight>[0-9]*))`,
+	`(?P<resizeType>(keep|stretch|crop|backgroundblur))`,
+	`(format(?P<format>jpeg|webp|png|gif|ptiff|jpeg2000))`,
+	`(overlay(?P<overlayCollection>[^-]+)-(?<overlaySignature>.+))`,
+}, "|")))
+
+func buildOptions(params []string) (*ImageOptions, error) {
+	var err error
+	var io *ImageOptions = &ImageOptions{
+		ActionType:   "keep",
+		TargetFormat: "keep",
+	}
+
+	for _, param := range params {
+		vals := FindStringSubmatch(imageParamRegexp, strings.ToLower(param))
+		for key, val := range vals {
+			if val == "" {
+				continue
+			}
+			switch key {
+			case "sizeWidth":
+				if io.Width, err = strconv.ParseInt(val, 10, 64); err != nil {
+					err = emperror.Wrapf(err, "cannot parse integer %s", val)
+					return nil, err
+				}
+			case "sizeHeight":
+				if io.Width, err = strconv.ParseInt(val, 10, 64); err != nil {
+					err = emperror.Wrapf(err, "cannot parse integer %s", val)
+					return nil, err
+				}
+			case "resizeType":
+				io.ActionType = val
+			case "format":
+				io.TargetFormat = val
+			case "overlayCollection":
+				io.OverlayCollection = val
+			case "overlaySignature":
+				io.OverlaySignature = val
+			}
+		}
+	}
+
+	return io, nil
+}
 
 func _getResizeParams(params []string) (Width, Height int64, Type, Format string, err error) {
 	Type = "keep"
 	for _, param := range params {
-		vals := FindStringSubmatch(resizeImageParamRegexp, strings.ToLower(param))
+		vals := FindStringSubmatch(imageParamRegexp, strings.ToLower(param))
 		for key, val := range vals {
 			if val == "" {
 				continue
@@ -79,13 +130,14 @@ func (ia *ImageAction) Do(meta *CoreMeta, action string, params []string, reader
 		return nil, ErrInvalidType
 	}
 
+	options, err := buildOptions(params)
+	if err != nil {
+		return nil, emperror.Wrapf(err, "cannot build options from param %v", params)
+	}
+
 	switch action {
 	case "resize":
-		Width, Height, Type, Format, err := _getResizeParams(params)
-		if err != nil {
-			return nil, emperror.Wrapf(err, "cannot evaluate resize parameters")
-		}
-		switch Type {
+		switch options.ActionType {
 		case "keep":
 			it, err = NewImageVips(reader)
 		case "stretch":
@@ -99,7 +151,7 @@ func (ia *ImageAction) Do(meta *CoreMeta, action string, params []string, reader
 			return nil, emperror.Wrapf(err, "cannot create image")
 		}
 		defer it.Close()
-		if err := it.Resize(Width, Height, Type, Format); err != nil {
+		if err := it.Resize(options); err != nil {
 			return nil, emperror.Wrapf(err, "cannot resize image - %v", params)
 		}
 	default:

@@ -86,7 +86,7 @@ func (ib *ImageBimg) Resize(params []string) (err error) {
 
 	switch Type {
 	case "keep":
-		w, h := CalcSize(int64(ib.meta.Size.Width), int64(ib.meta.Size.Height), Width, Height)
+		w, h := CalcSizeMin(int64(ib.meta.Size.Width), int64(ib.meta.Size.Height), Width, Height)
 		options.Width = int(w)
 		options.Height = int(h)
 		options.Embed = true
@@ -95,7 +95,7 @@ func (ib *ImageBimg) Resize(params []string) (err error) {
 		options.Height = int(Height)
 		options.Force = true
 	case "crop":
-		w, h := CalcSize(int64(ib.meta.Size.Width), int64(ib.meta.Size.Height), (Width), (Height))
+		w, h := CalcSizeMin(int64(ib.meta.Size.Width), int64(ib.meta.Size.Height), (Width), (Height))
 		options.Width = int(w)
 		options.Height = int(h)
 		options.Embed = true
@@ -107,7 +107,7 @@ func (ib *ImageBimg) Resize(params []string) (err error) {
 		options.GaussianBlur = bimg.GaussianBlur{Sigma: 10}
 
 		foreground := bimg.NewImage(ib.buf)
-		w, h := CalcSize(int64(ib.meta.Size.Width), int64(ib.meta.Size.Height), (Width), (Height))
+		w, h := CalcSizeMin(int64(ib.meta.Size.Width), int64(ib.meta.Size.Height), (Width), (Height))
 		fgOptions := bimg.Options{
 			Height: int(h),
 			Width:  int(w),

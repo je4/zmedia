@@ -27,31 +27,31 @@ func (it *ImageVips) Close() {}
 
 func (im *ImageVips) GetType() string { return "image" }
 
-func (it *ImageVips) Resize(width, height int64, _type, format string) (err error) {
+func (it *ImageVips) Resize(options *ImageOptions) (err error) {
 
 	//
 	// calculate missing size parameter
 	//
-	if width == 0 && height == 0 {
-		width = int64(it.image.Width())
-		height = int64(it.image.Height())
+	if options.Width == 0 && options.Height == 0 {
+		options.Width = int64(it.image.Width())
+		options.Height = int64(it.image.Height())
 	}
-	if width == 0 {
-		width = int64(math.Round(float64(height) * float64(it.image.Width()) / float64(it.image.Height())))
+	if options.Width == 0 {
+		options.Width = int64(math.Round(float64(options.Height) * float64(it.image.Width()) / float64(it.image.Height())))
 	}
-	if height == 0 {
-		height = int64(math.Round(float64(width) * float64(it.image.Height()) / float64(it.image.Width())))
+	if options.Height == 0 {
+		options.Height = int64(math.Round(float64(options.Width) * float64(it.image.Height()) / float64(it.image.Width())))
 	}
 
 	if err := it.image.AutoRotate(); err != nil {
 		return emperror.Wrapf(err, "cannot autorotate image")
 	}
 
-	hScale := float64(width) / float64(it.image.Width())
-	vScale := float64(height) / float64(it.image.Height())
+	hScale := float64(options.Width) / float64(it.image.Width())
+	vScale := float64(options.Height) / float64(it.image.Height())
 	var scale float64
 
-	switch _type {
+	switch options.ActionType {
 	case "keep":
 		scale = math.Min(hScale, vScale)
 		if err := it.image.Resize(scale, vips.KernelAuto); err != nil {
@@ -66,10 +66,10 @@ func (it *ImageVips) Resize(width, height int64, _type, format string) (err erro
 		if err := it.image.Resize(scale, vips.KernelAuto); err != nil {
 			return emperror.Wrapf(err, "cannot resize(%v)", scale)
 		}
-		l := (it.image.Width() - int(width)) / 2
-		t := (it.image.Height() - int(height)) / 2
-		if err := it.image.ExtractArea(l, t, int(width), int(height)); err != nil {
-			return emperror.Wrapf(err, "cannot extract(%v, %v, %v, %v)", l, t, int(width), int(height))
+		l := (it.image.Width() - int(options.Width)) / 2
+		t := (it.image.Height() - int(options.Height)) / 2
+		if err := it.image.ExtractArea(l, t, int(options.Width), int(options.Height)); err != nil {
+			return emperror.Wrapf(err, "cannot extract(%v, %v, %v, %v)", l, t, int(options.Width), int(options.Height))
 		}
 	}
 
