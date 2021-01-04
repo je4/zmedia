@@ -48,7 +48,7 @@ var imageParamRegexp = regexp.MustCompile(fmt.Sprintf(`^%s$`, strings.Join([]str
 	`(size(?P<sizeWidth>[0-9]*)x(?P<sizeHeight>[0-9]*))`,
 	`(?P<resizeType>(keep|stretch|crop|backgroundblur))`,
 	`(format(?P<format>jpeg|webp|png|gif|ptiff|jpeg2000))`,
-	`(overlay(?P<overlayCollection>[^-]+)-(?<overlaySignature>.+))`,
+	`(overlay(?P<overlayCollection>[^-]+)-(?P<overlaySignature>.+))`,
 }, "|")))
 
 func buildOptions(params []string) (*ImageOptions, error) {
@@ -135,29 +135,35 @@ func (ia *ImageAction) Do(meta *CoreMeta, action string, params []string, reader
 		return nil, emperror.Wrapf(err, "cannot build options from param %v", params)
 	}
 
-	switch action {
-	case "resize":
-		switch options.ActionType {
-		case "keep":
-			it, err = NewImageVips(reader)
-		case "stretch":
-			it, err = NewImageVips(reader)
-		case "crop":
-			it, err = NewImageVips(reader)
-		default:
-			it, err = NewImageMagickV3(reader)
-		}
-		if err != nil {
-			return nil, emperror.Wrapf(err, "cannot create image")
-		}
-		defer it.Close()
-		if err := it.Resize(options); err != nil {
-			return nil, emperror.Wrapf(err, "cannot resize image - %v", params)
-		}
+	switch meta.Mimetype {
+	case "image/gif":
+		it, err = NewImageMagickV3(reader)
 	default:
-		return nil, fmt.Errorf("invalid action %s", action)
+		switch action {
+		case "resize":
+			switch options.ActionType {
+			case "keep":
+				it, err = NewImageVips(reader)
+			case "stretch":
+				it, err = NewImageVips(reader)
+			case "crop":
+				it, err = NewImageVips(reader)
+			default:
+				it, err = NewImageMagickV3(reader)
+			}
+		default:
+			return nil, fmt.Errorf("invalid action %s", action)
+		}
 	}
-	cm, err := it.StoreImage("webp", writer)
+	if err != nil {
+		return nil, emperror.Wrapf(err, "cannot create image")
+	}
+	defer it.Close()
+	if err := it.Resize(options); err != nil {
+		return nil, emperror.Wrapf(err, "cannot resize image - %v", params)
+	}
+
+	cm, err := it.StoreImage(options.TargetFormat, writer)
 	if err != nil {
 		return nil, emperror.Wrapf(err, "cannot store image")
 	}

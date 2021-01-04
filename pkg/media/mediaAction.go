@@ -13,8 +13,8 @@ type CoreMeta struct {
 	Width    int64
 	Height   int64
 	Duration int64
-	Format   string
 	Mimetype string
+	Format   string
 }
 
 var ErrInvalidType = errors.New("mediatype: invalid type")

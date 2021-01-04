@@ -9,7 +9,8 @@ import (
 )
 
 type ImageMagickV3 struct {
-	mw *imagick.MagickWand
+	mw     *imagick.MagickWand
+	frames int64
 }
 
 func NewImageMagickV3(reader io.Reader) (*ImageMagickV3, error) {
@@ -36,12 +37,18 @@ func (im *ImageMagickV3) LoadImage(reader io.Reader) error {
 }
 
 func (im *ImageMagickV3) StoreImage(format string, writer io.Writer) (*CoreMeta, error) {
-	if err := im.mw.SetFilename(format); err != nil {
+	if err := im.mw.SetFormat(format); err != nil {
 		return nil, emperror.Wrapf(err, "cannot set format %s", format)
 	}
-	buf := im.mw.GetImagesBlob()
-	if _, err := io.Copy(writer, bytes.NewBuffer(buf)); err != nil {
-		return nil, emperror.Wrapf(err, "cannot write raw image data")
+	if im.frames > 1 {
+
+		if _, err := writer.Write(im.mw.GetImagesBlob()); err != nil {
+			return nil, emperror.Wrapf(err, "cannot write raw image data")
+		}
+	} else {
+		if _, err := writer.Write(im.mw.GetImageBlob()); err != nil {
+			return nil, emperror.Wrapf(err, "cannot write raw image data")
+		}
 	}
 
 	cm := &CoreMeta{
@@ -55,61 +62,67 @@ func (im *ImageMagickV3) StoreImage(format string, writer io.Writer) (*CoreMeta,
 }
 
 func (im *ImageMagickV3) Resize(options *ImageOptions) error {
-	//
-	// calculate missing size parameter
-	//
-	if options.Width == 0 && options.Height == 0 {
-		options.Width = int64(im.mw.GetImageWidth())
-		options.Height = int64(im.mw.GetImageHeight())
-	}
-	if options.Width == 0 {
-		options.Width = int64(math.Round(float64(options.Height) * float64(im.mw.GetImageWidth()) / float64(im.mw.GetImageHeight())))
-	}
-	if options.Height == 0 {
-		options.Height = int64(math.Round(float64(options.Width) * float64(im.mw.GetImageHeight()) / float64(im.mw.GetImageWidth())))
-	}
-
-	if err := im.mw.AutoOrientImage(); err != nil {
-		return emperror.Wrapf(err, "cannot auto orient image")
-	}
-
-	switch options.ActionType {
-	case "keep":
-		nw, nh := CalcSizeMin(int64(im.mw.GetImageWidth()), int64(im.mw.GetImageHeight()), options.Width, options.Height)
-		if err := im.mw.ResizeImage(uint(nw), uint(nh), imagick.FILTER_LANCZOS); err != nil {
-			return emperror.Wrapf(err, "cannot resizeimage(%v, %v)", uint(nw), uint(nh))
+	im.mw.ResetIterator()
+	im.frames = 0
+	for im.mw.NextImage() {
+		im.frames++
+		//
+		// calculate missing size parameter
+		//
+		if options.Width == 0 && options.Height == 0 {
+			options.Width = int64(im.mw.GetImageWidth())
+			options.Height = int64(im.mw.GetImageHeight())
 		}
-	case "stretch":
-		if err := im.mw.ResizeImage(uint(options.Width), uint(options.Height), imagick.FILTER_LANCZOS); err != nil {
-			return emperror.Wrapf(err, "cannot resizeimage(%v, %v)", uint(options.Width), uint(options.Height))
+		if options.Width == 0 {
+			options.Width = int64(math.Round(float64(options.Height) * float64(im.mw.GetImageWidth()) / float64(im.mw.GetImageHeight())))
 		}
-	case "crop":
-		nw, nh := CalcSizeMax(int64(im.mw.GetImageWidth()), int64(im.mw.GetImageHeight()), options.Width, options.Height)
-		if err := im.mw.ResizeImage(uint(nw), uint(nh), imagick.FILTER_LANCZOS); err != nil {
-			return emperror.Wrapf(err, "cannot resizeimage(%v, %v)", uint(nw), uint(nh))
-		}
-		x := (options.Width - nw) / 2
-		y := (options.Height - nh) / 2
-		if err := im.mw.CropImage(uint(options.Width), uint(options.Height), int(x), int(y)); err != nil {
-			return emperror.Wrapf(err, "cannot cropimage(%v, %v, %v, %v", uint(options.Width), uint(options.Height), int(x), int(y))
-		}
-	case "backgroundblur":
-		foreground := im.mw.Clone()
-		nw, nh := CalcSizeMin(int64(im.mw.GetImageWidth()), int64(im.mw.GetImageHeight()), int64(options.Width), int64(options.Height))
-		if err := foreground.ResizeImage(uint(nw), uint(nh), imagick.FILTER_LANCZOS); err != nil {
-			return emperror.Wrapf(err, "cannot resizeimage(%v, %v) - foreground", uint(nw), uint(nh))
+		if options.Height == 0 {
+			options.Height = int64(math.Round(float64(options.Width) * float64(im.mw.GetImageHeight()) / float64(im.mw.GetImageWidth())))
 		}
 
-		if err := im.mw.ResizeImage(uint(options.Width), uint(options.Height), imagick.FILTER_LANCZOS); err != nil {
-			return emperror.Wrapf(err, "cannot resizeimage(%v, %v)", uint(options.Width), uint(options.Height))
+		if err := im.mw.AutoOrientImage(); err != nil {
+			return emperror.Wrapf(err, "cannot auto orient image")
 		}
 
-		if err := im.mw.BlurImage(20, 30.0); err != nil {
-			return emperror.Wrapf(err, "cannot blurimage(%v, %v)", 20.0, 30.0)
-		}
+		switch options.ActionType {
+		case "keep":
+			nw, nh := CalcSizeMin(int64(im.mw.GetImageWidth()), int64(im.mw.GetImageHeight()), options.Width, options.Height)
+			if err := im.mw.ResizeImage(uint(nw), uint(nh), imagick.FILTER_LANCZOS); err != nil {
+				return emperror.Wrapf(err, "cannot resizeimage(%v, %v)", uint(nw), uint(nh))
+			}
+		case "stretch":
+			if err := im.mw.ResizeImage(uint(options.Width), uint(options.Height), imagick.FILTER_LANCZOS); err != nil {
+				return emperror.Wrapf(err, "cannot resizeimage(%v, %v)", uint(options.Width), uint(options.Height))
+			}
+		case "crop":
+			nw, nh := CalcSizeMax(int64(im.mw.GetImageWidth()), int64(im.mw.GetImageHeight()), options.Width, options.Height)
+			if err := im.mw.ResizeImage(uint(nw), uint(nh), imagick.FILTER_LANCZOS); err != nil {
+				return emperror.Wrapf(err, "cannot resizeimage(%v, %v)", uint(nw), uint(nh))
+			}
+			x := (options.Width - nw) / 2
+			y := (options.Height - nh) / 2
+			if err := im.mw.CropImage(uint(options.Width), uint(options.Height), int(x), int(y)); err != nil {
+				return emperror.Wrapf(err, "cannot cropimage(%v, %v, %v, %v", uint(options.Width), uint(options.Height), int(x), int(y))
+			}
+		case "backgroundblur":
+			foreground := im.mw.Clone()
+			defer foreground.Destroy()
+			nw, nh := CalcSizeMin(int64(im.mw.GetImageWidth()), int64(im.mw.GetImageHeight()), int64(options.Width), int64(options.Height))
+			if err := foreground.ResizeImage(uint(nw), uint(nh), imagick.FILTER_LANCZOS); err != nil {
+				return emperror.Wrapf(err, "cannot resizeimage(%v, %v) - foreground", uint(nw), uint(nh))
+			}
 
-		if err := im.mw.CompositeImageGravity(foreground, imagick.COMPOSITE_OP_COPY, imagick.GRAVITY_CENTER); err != nil {
-			return emperror.Wrapf(err, "cannot composite images")
+			if err := im.mw.ResizeImage(uint(options.Width), uint(options.Height), imagick.FILTER_LANCZOS); err != nil {
+				return emperror.Wrapf(err, "cannot resizeimage(%v, %v)", uint(options.Width), uint(options.Height))
+			}
+
+			if err := im.mw.BlurImage(20, 30.0); err != nil {
+				return emperror.Wrapf(err, "cannot blurimage(%v, %v)", 20.0, 30.0)
+			}
+
+			if err := im.mw.CompositeImageGravity(foreground, imagick.COMPOSITE_OP_COPY, imagick.GRAVITY_CENTER); err != nil {
+				return emperror.Wrapf(err, "cannot composite images")
+			}
 		}
 	}
 	return nil

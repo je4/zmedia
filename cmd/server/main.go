@@ -112,7 +112,7 @@ func main() {
 	action, err = media.NewImageAction()
 	defer action.Close()
 
-	readfile := "web/static/pferd.jpg"
+	readfile := "web/static/ApprehensiveBlackandwhiteEarwig.gif"
 	rp, err := os.OpenFile(readfile, os.O_RDONLY, 0644)
 	if err != nil {
 		log.Errorf("cannot open file %s", readfile)
@@ -120,7 +120,7 @@ func main() {
 	}
 	defer rp.Close()
 
-	writefile := "web/static/test3.webp"
+	writefile := "web/static/test.gif"
 	//	writefile := "/tmp/test3.webp"
 	wp, err := os.OpenFile(writefile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
@@ -133,11 +133,10 @@ func main() {
 		Width:    1600,
 		Height:   1200,
 		Duration: 0,
-		Format:   "jpeg",
-		Mimetype: "image/jpeg",
+		Mimetype: "image/gif",
 	}, "resize", []string{
 		"size800x300",
-		"formatWEBP",
+		"formatGIF",
 		"",
 	}, rp, wp)
 	if err != nil {
