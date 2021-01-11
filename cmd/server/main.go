@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"flag"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
-	"github.com/je4/zmedia/v2/pkg/media"
 	"github.com/je4/zmedia/v2/pkg/mediaserver"
 	_ "github.com/lib/pq"
 	"io"
@@ -63,95 +62,11 @@ func main() {
 		return
 	}
 
-	/*
-		pgdb, err := database.NewPostgresDB(db, "public", log)
-		if err != nil {
-			log.Errorf("cannot create postgres database layer: %v", err)
-			return
-		}
-
-		mediadb, err := database.NewMediaDatabase(pgdb, fss)
-		if err != nil {
-			log.Errorf("cannot create mediaserver database layer: %v", err)
-			return
-		}
-	*/
-
-	/*
-		_, err = mediadb.GetEstateByName("mediathek")
-		//_, err = mediadb.CreateEstate("mediathek", "Mediathek HGK")
-		if err != nil {
-			log.Errorf("cannot create storage: %v", err)
-			return
-		}
-
-		//_, err = mediadb.CreateStorage("test", "hgk", "")
-		_, err = mediadb.GetStorageByName("test")
-		if err != nil {
-			log.Errorf("cannot get storage: %v", err)
-			return
-		}
-
-		//_, err = mediadb.CreateCollection("test", est, stor, "test-", "testing 123", 0)
-		coll, err := mediadb.GetCollectionByName("test")
-		if err != nil {
-			log.Errorf("cannot create collection: %v", err)
-			return
-		}
-		coll, err = mediadb.GetCollectionByName("test")
-		if err != nil {
-			log.Errorf("cannot create collection: %v", err)
-			return
-		}
-		log.Infof("Collection #%d - %s", coll.Id, coll.Name)
-
-	*/
-
-	var action media.Action
-
-	action, err = media.NewImageAction()
-	defer action.Close()
-
-	readfile := "web/static/pferd.jpg"
-	rp, err := os.OpenFile(readfile, os.O_RDONLY, 0644)
-	if err != nil {
-		log.Errorf("cannot open file %s", readfile)
-		return
-	}
-	defer rp.Close()
-
-	writefile := "web/static/test.webp"
-	//	writefile := "/tmp/test3.webp"
-	wp, err := os.OpenFile(writefile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Errorf("cannot open file %s: %v", writefile, err)
-		return
-	}
-	defer wp.Close()
-
-	cm, err := action.Do(&media.CoreMeta{
-		Width:    1600,
-		Height:   1200,
-		Duration: 0,
-		Mimetype: "image/jpeg",
-	}, "resize", []string{
-		"size900x300",
-		"formatWEBP",
-		"extent",
-		"backgroundffaaaa",
-	}, rp, wp)
-	if err != nil {
-		log.Errorf("cannot execute resize: %v", err)
-		return
-	}
-
-	log.Infof("result: %v", cm)
-	return
-
-	srv, err := mediaserver.NewServer(
-		config.HTTPSAddr, config.HTTP3Addr,
-		config.HTTPSAddrExt, config.HTTP3AddrExt,
+	srv, err := mediaserver.NewServerHTTP3(
+		config.HTTPSAddr,
+		config.HTTPSAddrExt,
 		config.DataPrefix,
+		config.MediaPrefix,
 		config.StaticPrefix,
 		config.StaticFolder,
 		config.JWTKey,
@@ -165,8 +80,14 @@ func main() {
 		return
 	}
 
+	mh, err := mediaserver.NewMediaHandler()
+	if err != nil {
+		log.Errorf("cannot create media handler: %v", mh)
+		return
+	}
+
 	go func() {
-		if err := srv.ListenAndServe(config.CertPEM, config.KeyPEM); err != nil {
+		if err := srv.ListenAndServeHTTP3(config.CertPEM, config.KeyPEM, mh); err != nil {
 			log.Errorf("services ended: %v", err)
 		}
 	}()

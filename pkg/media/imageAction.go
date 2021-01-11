@@ -97,35 +97,6 @@ func buildOptions(params []string) (*ImageOptions, error) {
 	return io, nil
 }
 
-func _getResizeParams(params []string) (Width, Height int64, Type, Format string, err error) {
-	Type = "keep"
-	for _, param := range params {
-		vals := FindStringSubmatch(imageParamRegexp, strings.ToLower(param))
-		for key, val := range vals {
-			if val == "" {
-				continue
-			}
-			switch key {
-			case "sizeWidth":
-				if Width, err = strconv.ParseInt(val, 10, 64); err != nil {
-					err = emperror.Wrapf(err, "cannot parse integer %s", val)
-					return
-				}
-			case "sizeHeight":
-				if Height, err = strconv.ParseInt(val, 10, 64); err != nil {
-					err = emperror.Wrapf(err, "cannot parse integer %s", val)
-					return
-				}
-			case "resizeType":
-				Type = val
-			case "format":
-				Format = val
-			}
-		}
-	}
-	return
-}
-
 func (ia *ImageAction) Do(meta *CoreMeta, action string, params []string, reader io.Reader, writer io.Writer) (*CoreMeta, error) {
 	var err error
 	var it ImageType
@@ -166,8 +137,13 @@ func (ia *ImageAction) Do(meta *CoreMeta, action string, params []string, reader
 		return nil, emperror.Wrapf(err, "cannot create image")
 	}
 	defer it.Close()
-	if err := it.Resize(options); err != nil {
-		return nil, emperror.Wrapf(err, "cannot resize image - %v", params)
+	switch action {
+	case "resize":
+		if err := it.Resize(options); err != nil {
+			return nil, emperror.Wrapf(err, "cannot resize image - %v", params)
+		}
+	default:
+		return nil, fmt.Errorf("invalid action - %s", action)
 	}
 
 	cm, err := it.StoreImage(options.TargetFormat, writer)

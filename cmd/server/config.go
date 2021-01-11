@@ -62,6 +62,7 @@ type Config struct {
 	JWTKey             string       `toml:"jwtkey"`
 	JWTAlg             []string     `toml:"jwtalg"`
 	LinkTokenExp       duration     `toml:"linktokenexp"`
+	MediaPrefix        string       `toml:"mediaprefix"`
 	DataPrefix         string       `toml:"mediaprefix"`
 	StaticPrefix       string       `toml:"staticprefix"`
 	StaticFolder       string       `toml:"staticfolder"`
@@ -78,6 +79,7 @@ func LoadConfig(fp string) Config {
 	}
 	//fmt.Sprintf("%v", m)
 	conf.DataPrefix = strings.Trim(conf.DataPrefix, "/")
+	conf.MediaPrefix = strings.Trim(conf.MediaPrefix, "/")
 	conf.StaticPrefix = strings.Trim(conf.StaticPrefix, "/")
 	conf.HTTPSAddrExt = strings.TrimRight(conf.HTTPSAddrExt, "/")
 	conf.HTTP3AddrExt = strings.TrimRight(conf.HTTP3AddrExt, "/")
