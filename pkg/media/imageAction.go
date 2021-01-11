@@ -28,6 +28,7 @@ type ImageOptions struct {
 	ActionType                          string
 	TargetFormat                        string
 	OverlayCollection, OverlaySignature string
+	BackgroundColor                     string
 }
 
 func NewImageAction() (*ImageAction, error) {
@@ -46,7 +47,8 @@ func (im *ImageMagickV3) GetType() string { return "image" }
 
 var imageParamRegexp = regexp.MustCompile(fmt.Sprintf(`^%s$`, strings.Join([]string{
 	`(size(?P<sizeWidth>[0-9]*)x(?P<sizeHeight>[0-9]*))`,
-	`(?P<resizeType>(keep|stretch|crop|backgroundblur))`,
+	`(background(?P<background>(none|[0-9a-f]+)))`,
+	`(?P<resizeType>(keep|stretch|crop|backgroundblur|extent))`,
 	`(format(?P<format>jpeg|webp|png|gif|ptiff|jpeg2000))`,
 	`(overlay(?P<overlayCollection>[^-]+)-(?P<overlaySignature>.+))`,
 }, "|")))
@@ -65,13 +67,18 @@ func buildOptions(params []string) (*ImageOptions, error) {
 				continue
 			}
 			switch key {
+			case "background":
+				if val != "none" {
+					val = "#" + val
+				}
+				io.BackgroundColor = val
 			case "sizeWidth":
 				if io.Width, err = strconv.ParseInt(val, 10, 64); err != nil {
 					err = emperror.Wrapf(err, "cannot parse integer %s", val)
 					return nil, err
 				}
 			case "sizeHeight":
-				if io.Width, err = strconv.ParseInt(val, 10, 64); err != nil {
+				if io.Height, err = strconv.ParseInt(val, 10, 64); err != nil {
 					err = emperror.Wrapf(err, "cannot parse integer %s", val)
 					return nil, err
 				}

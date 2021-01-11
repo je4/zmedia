@@ -104,6 +104,23 @@ func (im *ImageMagickV3) Resize(options *ImageOptions) error {
 			if err := im.mw.CropImage(uint(options.Width), uint(options.Height), int(x), int(y)); err != nil {
 				return emperror.Wrapf(err, "cannot cropimage(%v, %v, %v, %v", uint(options.Width), uint(options.Height), int(x), int(y))
 			}
+		case "extent":
+			nw, nh := CalcSizeMin(int64(im.mw.GetImageWidth()), int64(im.mw.GetImageHeight()), int64(options.Width), int64(options.Height))
+			if err := im.mw.ResizeImage(uint(nw), uint(nh), imagick.FILTER_LANCZOS); err != nil {
+				return emperror.Wrapf(err, "cannot resizeimage(%v, %v)", uint(nw), uint(nh))
+			}
+			im.mw.SetGravity(imagick.GRAVITY_CENTER)
+			pw := imagick.NewPixelWand()
+			defer pw.Destroy()
+			pw.SetColor(options.BackgroundColor)
+			im.mw.SetImageBackgroundColor(pw)
+			w := uint(options.Width)
+			h := uint(options.Height)
+			x := (int(options.Width) - int(nw)) / 2
+			y := (int(options.Height) - int(nh)) / 2
+			if err := im.mw.ExtentImage(w, h, -x, -y); err != nil {
+				return emperror.Wrapf(err, "cannot extentimage(%v, %v, %v, %v)", w, h, x, y)
+			}
 		case "backgroundblur":
 			foreground := im.mw.Clone()
 			defer foreground.Destroy()
