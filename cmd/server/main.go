@@ -80,7 +80,7 @@ func main() {
 		return
 	}
 
-	mh, err := mediaserver.NewMediaHandler()
+	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix)
 	if err != nil {
 		log.Errorf("cannot create media handler: %v", mh)
 		return

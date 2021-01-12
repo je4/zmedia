@@ -63,7 +63,7 @@ type Config struct {
 	JWTAlg             []string     `toml:"jwtalg"`
 	LinkTokenExp       duration     `toml:"linktokenexp"`
 	MediaPrefix        string       `toml:"mediaprefix"`
-	DataPrefix         string       `toml:"mediaprefix"`
+	DataPrefix         string       `toml:"dataprefix"`
 	StaticPrefix       string       `toml:"staticprefix"`
 	StaticFolder       string       `toml:"staticfolder"`
 	DBOld              Cfg_database `toml:"dbold"`

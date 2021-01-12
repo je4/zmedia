@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/goph/emperror"
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/op/go-logging"
@@ -74,7 +73,17 @@ func NewServerHTTP3(
 	return srv, nil
 }
 
-func listenAndServeHTTP3(addr string, certs []tls.Certificate, handler http.Handler) error {
+func ListenAndServeHTTP3(addr string, certs []tls.Certificate, handler http.Handler) error {
+	// Load certs
+	var err error
+	/*
+		certs := make([]tls.Certificate, 1)
+		certs[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return err
+		}
+	*/
+
 	// We currently only use the cert-related stuff from tls.Config,
 	// so we don't need to make a full copy.
 	config := &tls.Config{
@@ -126,6 +135,9 @@ func listenAndServeHTTP3(addr string, certs []tls.Certificate, handler http.Hand
 	hErr := make(chan error)
 	qErr := make(chan error)
 	go func() {
+		hErr <- httpServer.Serve(tlsConn)
+	}()
+	go func() {
 		qErr <- quicServer.Serve(udpConn)
 	}()
 
@@ -140,25 +152,17 @@ func listenAndServeHTTP3(addr string, certs []tls.Certificate, handler http.Hand
 }
 
 func (s *ServerHTTP3) ListenAndServeHTTP3(cert, key string, mh *MediaHandler) error {
-	routerHTTP := mux.NewRouter()
 	staticPrefix := fmt.Sprintf("/%v/", s.staticPrefix)
-	routerHTTP.PathPrefix(staticPrefix).
-		Handler(http.StripPrefix(staticPrefix, http.FileServer(http.Dir(s.staticFolder))))
-	routerHTTP.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Alt-Svc", fmt.Sprintf(`h3=":%v"; ma=86400,h3-23=":%v"; ma=86400,h3-27=":%v"; ma=86400, h3-28=":%v"; ma=86400, h3-29=":%v"; ma=86400, quic=":%v"; ma=86400`, s.port, s.port, s.port, s.port, s.port, s.port))
-			// Pass down the request to the next middleware (or final handler)
-			next.ServeHTTP(w, r)
-		})
-	})
 
 	routerHTTP3 := mux.NewRouter()
 	routerHTTP3.PathPrefix(staticPrefix).
 		Handler(http.StripPrefix(staticPrefix, http.FileServer(http.Dir(s.staticFolder))))
-	loggedRouter3 := handlers.CombinedLoggingHandler(s.accesslog, routerHTTP3)
+		//	loggedRouter3 := handlers.CombinedLoggingHandler(s.accesslog, routerHTTP3)
 
-	sub := routerHTTP3.Path(fmt.Sprintf("/%s/", s.mediaPrefix)).Subrouter()
-	if err := mh.SetRoutes(sub); err != nil {
+	/*
+		sub := routerHTTP3.PathPrefix(fmt.Sprintf("/%s/", s.mediaPrefix)).Subrouter()
+	*/
+	if err := mh.SetRoutes(routerHTTP3); err != nil {
 		return emperror.Wrap(err, "cannot initialize subroutes")
 	}
 
@@ -184,7 +188,11 @@ func (s *ServerHTTP3) ListenAndServeHTTP3(cert, key string, mh *MediaHandler) er
 	wg.Add(1)
 	go func() {
 		s.log.Infof("starting HTTP3 zsearch at %v", addr)
-		http3Err = listenAndServeHTTP3(addr, certs, loggedRouter3) // s.srv3.ListenAndServe()
+		//		http3Err = listenAndServeHTTP3(addr, certs, loggedRouter3) // s.srv3.ListenAndServe()
+		err := ListenAndServeHTTP3(addr, certs, routerHTTP3)
+		if err != nil {
+			s.log.Errorf("server not started: %v", err)
+		}
 
 		s.log.Infof("HTTP3 service stopped: %v", http3Err)
 		wg.Done()
