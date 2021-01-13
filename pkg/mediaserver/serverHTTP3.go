@@ -187,7 +187,7 @@ func (s *ServerHTTP3) ListenAndServeHTTP3(cert, key string, mh *MediaHandler) er
 	var http3Err error
 	wg.Add(1)
 	go func() {
-		s.log.Infof("starting HTTP3 zsearch at %v", addr)
+		s.log.Infof("starting HTTP3 zsearch at https://%s/%s", addr, s.mediaPrefix)
 		//		http3Err = listenAndServeHTTP3(addr, certs, loggedRouter3) // s.srv3.ListenAndServe()
 		err := ListenAndServeHTTP3(addr, certs, routerHTTP3)
 		if err != nil {

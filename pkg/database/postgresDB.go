@@ -380,7 +380,45 @@ func (db *PostgresDB) GetMasterById(mdb *MediaDatabase, collection *Collection, 
 	return master, nil
 }
 
-func (db *PostgresDB) GetCache(mdb *MediaDatabase, master *Master, action string, paramstr string) (*Cache, error) {
+func (db *PostgresDB) GetCache(mdb *MediaDatabase, collection, signature, action string, paramstr string) (*Cache, error) {
+
+	sqlstr := fmt.Sprintf("SELECT m.masterid, c.cacheid, c.storageid, coll.collectionid, c.width, c.height, duration, c.mimetype, c.filesize, c.path "+
+		"  FROM %s.cache AS c, %s.master AS m, %s.collection AS coll"+
+		"  WHERE  coll.name=$1"+
+		"     AND coll.collectionid=m.collectionid"+
+		"     AND m.signature=$2"+
+		"     AND m.masterid=c.masterid"+
+		"     AND action=$3"+
+		"     AND param=$4", db.schema, db.schema, db.schema)
+	sqlparams := []interface{}{
+		collection,
+		signature,
+		action,
+		paramstr,
+	}
+	db.logger.Debugf("SQL: %s - %v", sqlstr, sqlparams)
+	row := db.db.QueryRow(sqlstr, sqlparams...)
+	var Masterid int64
+	var CacheId, StorageId, CollectionId int64
+	var Width, Height, Duration int64
+	var Mimetype string
+	var Filesize int64
+	var Path string
+	switch err := row.Scan(&Masterid, &CacheId, &StorageId, &CollectionId, &Width, &Height, &Duration, &Mimetype, &Filesize, &Path); err {
+	case sql.ErrNoRows:
+		return nil, ErrNotFound
+	case nil:
+
+	default:
+		return nil, fmt.Errorf("cannot get cache %s/%s/%s/%s", collection, signature, action, paramstr)
+	}
+	cache, err := NewCache(mdb, CacheId, CollectionId, Masterid, action, paramstr, Mimetype, Filesize, Path, Width, Height, Duration)
+	if err != nil {
+		return nil, emperror.Wrapf(err, "cannot instantiate cache %s/%s/%s/%s", collection, signature, action, paramstr)
+	}
+	return cache, nil
+}
+func (db *PostgresDB) GetCacheByMaster(mdb *MediaDatabase, master *Master, action string, paramstr string) (*Cache, error) {
 
 	coll, err := master.GetCollection()
 	if err != nil {

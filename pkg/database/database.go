@@ -1,5 +1,9 @@
 package database
 
+import "errors"
+
+var ErrNotFound = errors.New("database: could not find entry")
+
 type Database interface {
 	GetStorages(mdb *MediaDatabase, callback func(storage *Storage) error) error
 	GetStorageById(mdb *MediaDatabase, storageid int64) (*Storage, error)
@@ -19,5 +23,6 @@ type Database interface {
 	GetMaster(mdb *MediaDatabase, collection *Collection, signature string) (*Master, error)
 	GetMasterById(mdb *MediaDatabase, collection *Collection, masterid int64) (*Master, error)
 
-	GetCache(mdb *MediaDatabase, master *Master, action string, paramstr string) (*Cache, error)
+	GetCacheByMaster(mdb *MediaDatabase, master *Master, action string, paramstr string) (*Cache, error)
+	GetCache(mdb *MediaDatabase, collection, signature, action string, paramstr string) (*Cache, error)
 }

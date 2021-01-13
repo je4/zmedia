@@ -292,7 +292,7 @@ func (db *MediaDatabase) GetMasterById(collection *Collection, masterid int64) (
 	return master, nil
 }
 
-func (db *MediaDatabase) GetCache(master *Master, action string, paramstr string) (*Cache, error) {
+func (db *MediaDatabase) GetCache(collection, signature, action string, paramstr string) (*Cache, error) {
 	action = strings.ToLower(action)
 	lparams := []string{}
 	for _, param := range strings.Split(paramstr, "/") {
@@ -301,5 +301,16 @@ func (db *MediaDatabase) GetCache(master *Master, action string, paramstr string
 	sort.Strings(lparams)
 	paramstr = strings.Join(lparams, "/")
 
-	return db.db.GetCache(db, master, action, paramstr)
+	return db.db.GetCache(db, collection, signature, action, paramstr)
+}
+func (db *MediaDatabase) GetCacheByMaster(master *Master, action string, paramstr string) (*Cache, error) {
+	action = strings.ToLower(action)
+	lparams := []string{}
+	for _, param := range strings.Split(paramstr, "/") {
+		lparams = append(lparams, strings.ToLower(param))
+	}
+	sort.Strings(lparams)
+	paramstr = strings.Join(lparams, "/")
+
+	return db.db.GetCacheByMaster(db, master, action, paramstr)
 }

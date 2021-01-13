@@ -45,7 +45,7 @@ type FileSystem interface {
 	FilePut(folder, name string, data []byte, opts FilePutOptions) error
 	FileWrite(folder, name string, r io.Reader, size int64, opts FilePutOptions) error
 	FileRead(folder, name string, w io.Writer, size int64, opts FileGetOptions) error
-	FileOpenRead(folder, name string, opts FileGetOptions) (io.ReadCloser, error)
+	FileOpenRead(folder, name string, opts FileGetOptions) (io.ReadCloser, int64, error)
 	FileStat(folder, name string, opts FileStatOptions) (os.FileInfo, error)
 	String() string
 	Protocol() string
