@@ -11,6 +11,7 @@ import (
 )
 
 type LocalFs struct {
+	name     string
 	basepath string
 	logger   *logging.Logger
 }
@@ -31,7 +32,7 @@ func FolderExists(filename string) bool {
 	return info.IsDir()
 }
 
-func NewLocalFs(basepath string, logger *logging.Logger) (*LocalFs, error) {
+func NewLocalFs(name, basepath string, logger *logging.Logger) (*LocalFs, error) {
 	if !FolderExists(basepath) {
 		return nil, fmt.Errorf("path %v does not exists", basepath)
 	}
@@ -39,7 +40,7 @@ func NewLocalFs(basepath string, logger *logging.Logger) (*LocalFs, error) {
 }
 
 func (fs *LocalFs) Protocol() string {
-	return "file://"
+	return fmt.Sprintf("file://%s", fs.name)
 }
 
 func (fs *LocalFs) String() string {
@@ -137,11 +138,15 @@ func (fs *LocalFs) FileRead(folder, name string, w io.Writer, size int64, opts F
 	return nil
 }
 
-func (fs *LocalFs) FileOpenRead(folder, name string, opts FileGetOptions) (io.ReadCloser, error) {
+func (fs *LocalFs) FileOpenRead(folder, name string, opts FileGetOptions) (io.ReadCloser, int64, error) {
 	path := filepath.Join(folder, name)
 	file, err := os.OpenFile(filepath.Join(fs.basepath, path), os.O_RDONLY, 0644)
 	if err != nil {
-		return nil, emperror.Wrapf(err, "cannot open file %v", path)
+		return nil, 0, emperror.Wrapf(err, "cannot open file %v", path)
 	}
-	return file, nil
+	oinfo, err := file.Stat()
+	if err != nil {
+		return nil, 0, emperror.Wrapf(err, "cannot get object info %v/%v", folder, name)
+	}
+	return file, oinfo.Size(), nil
 }

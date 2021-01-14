@@ -6,6 +6,8 @@ import (
 	"github.com/goph/emperror"
 	"github.com/gosimple/slug"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
+	"io"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,10 +34,9 @@ type MediaDatabase struct {
 	cache             gcache.Cache
 }
 
-func NewMediaDatabase(db Database, fss map[string]filesystem.FileSystem) (*MediaDatabase, error) {
+func NewMediaDatabase(db Database, fss ...filesystem.FileSystem) (*MediaDatabase, error) {
 	mdb := &MediaDatabase{
 		db:    db,
-		fss:   fss,
 		cache: gcache.New(50).ARC().Expiration(3 * time.Hour).Build(),
 		mutex: map[DataType]*sync.Mutex{
 			DT_Storage:    {},
@@ -44,6 +45,10 @@ func NewMediaDatabase(db Database, fss map[string]filesystem.FileSystem) (*Media
 			DT_Master:     {},
 			DT_Cache:      {},
 		},
+		fss: make(map[string]filesystem.FileSystem),
+	}
+	for _, fs := range fss {
+		mdb.fss[fs.Protocol()] = fs
 	}
 	mdb.Init()
 
@@ -70,6 +75,31 @@ func (db *MediaDatabase) Init() error {
 		return nil
 	})
 	return nil
+}
+
+var pathRegexp = regexp.MustCompile(`^([^:]+://[^/]+)/([^/]+)/(.+)$`)
+
+func (db *MediaDatabase) FileOpenRead(path string, opts filesystem.FileGetOptions) (io.ReadCloser, int64, error) {
+	matches := pathRegexp.FindStringSubmatch(path)
+	if matches == nil {
+		return nil, 0, fmt.Errorf("invalid path - cannot load file %s from storage", path)
+	}
+	fs, ok := db.fss[matches[1]]
+	if !ok {
+		return nil, 0, fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
+	}
+	return fs.FileOpenRead(matches[2], matches[3], opts)
+}
+func (db *MediaDatabase) FileWrite(path string, reader io.Reader, size int64, opts filesystem.FilePutOptions) error {
+	matches := pathRegexp.FindStringSubmatch(path)
+	if matches == nil {
+		return fmt.Errorf("invalid path - cannot load file %s from storage", path)
+	}
+	fs, ok := db.fss[matches[1]]
+	if !ok {
+		return fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
+	}
+	return fs.FileWrite(matches[2], matches[3], reader, size, opts)
 }
 
 func (db *MediaDatabase) GetEstateById(id int64) (*Estate, error) {
@@ -171,34 +201,11 @@ func (db *MediaDatabase) CreateStorage(name string, fsname, jwtKey string) (*Sto
 	if err != nil {
 		return nil, emperror.Wrapf(err, "cannot check folder %s/%s", fs.String(), fname)
 	}
-	if exists {
-		return nil, fmt.Errorf("folder %s/%s already exists", fs.String(), fname)
-	}
-	if err := fs.BucketCreate(fname, filesystem.FolderCreateOptions{}); err != nil {
-		return nil, emperror.Wrapf(err, "cannot create folder %s/%s", fs.String(), fname)
-	}
-
-	/*
-		// create subfolders with cache directories
-		for _, sub := range []string{"data", "video", "submaster", "temp"} {
-			dirname := fname + "/" + sub
-			if err := fs.BucketCreate(dirname, filesystem.FolderCreateOptions{}); err != nil {
-				return nil, emperror.Wrapf(err, "cannot create folder %s/%s", fs.String(), dirname)
-			}
-			for _, hex := range []rune("0123456789abcdef") {
-				hname := dirname + "/" + string([]rune{hex})
-				if err := fs.BucketCreate(hname, filesystem.FolderCreateOptions{}); err != nil {
-					return nil, emperror.Wrapf(err, "cannot create folder %s/%s", fs.String(), hname)
-				}
-				for _, hex2 := range []rune("0123456789abcdef") {
-					hname2 := hname + "/" + string([]rune{hex2})
-					if err := fs.BucketCreate(hname2, filesystem.FolderCreateOptions{}); err != nil {
-						return nil, emperror.Wrapf(err, "cannot create folder %s/%s", fs.String(), hname2)
-					}
-				}
-			}
+	if !exists {
+		if err := fs.BucketCreate(fname, filesystem.FolderCreateOptions{}); err != nil {
+			return nil, emperror.Wrapf(err, "cannot create folder %s/%s", fs.String(), fname)
 		}
-	*/
+	}
 	return db.db.CreateStorage(db, name, fsname, jwtKey)
 }
 
@@ -290,6 +297,9 @@ func (db *MediaDatabase) GetMasterById(collection *Collection, masterid int64) (
 		return nil, emperror.Wrapf(err, "cannot store master %s in cache", key)
 	}
 	return master, nil
+}
+func (db *MediaDatabase) CreateMaster(collection *Collection, signature, urn string, parent *Master) (*Master, error) {
+	return db.db.CreateMaster(db, collection, signature, urn, parent)
 }
 
 func (db *MediaDatabase) GetCache(collection, signature, action string, paramstr string) (*Cache, error) {

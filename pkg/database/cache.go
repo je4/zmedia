@@ -61,3 +61,7 @@ func (c *Cache) GetMaster() (*Master, error) {
 	}
 	return c.master, nil
 }
+
+func (c *Cache) Store() error {
+	return c.db.db.StoreCache(c.db, c)
+}

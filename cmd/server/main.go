@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"flag"
+	"github.com/je4/zmedia/v2/pkg/database"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
 	"github.com/je4/zmedia/v2/pkg/mediaserver"
 	_ "github.com/lib/pq"
@@ -36,15 +37,22 @@ func main() {
 		accesslog = f
 	}
 
-	var fss map[string]filesystem.FileSystem = make(map[string]filesystem.FileSystem)
-
+	var fss []filesystem.FileSystem
 	for _, s3 := range config.S3 {
-		fs, err := filesystem.NewS3Fs(s3.Endpoint, s3.AccessKeyId, s3.SecretAccessKey, s3.UseSSL)
+		fs, err := filesystem.NewS3Fs(s3.Name, s3.Endpoint, s3.AccessKeyId, s3.SecretAccessKey, s3.UseSSL)
 		if err != nil {
 			log.Errorf("cannot connect to s3 instance %v: %v", s3.Name, err)
 			return
 		}
-		fss[s3.Name] = fs
+		fss = append(fss, fs)
+	}
+	for _, f := range config.FileMap {
+		fs, err := filesystem.NewLocalFs(f.Alias, f.Folder, log)
+		if err != nil {
+			log.Errorf("cannot load local filesystem instance %v: %v", f.Alias, err)
+			return
+		}
+		fss = append(fss, fs)
 	}
 
 	// get database connection handle
@@ -61,6 +69,14 @@ func main() {
 		log.Errorf("error pinging database: %v", err)
 		return
 	}
+
+	pg, err := database.NewPostgresDB(db, config.DB.Schema, log)
+	if err != nil {
+		log.Errorf("error creating PostgresDB: %v", err)
+		return
+	}
+
+	mdb, err := database.NewMediaDatabase(pg, fss...)
 
 	srv, err := mediaserver.NewServerHTTP3(
 		config.HTTPSAddr,
@@ -80,7 +96,40 @@ func main() {
 		return
 	}
 
-	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix, log)
+	/*
+		stor, err := mdb.CreateStorage("test", "s3://hgk", "")
+		if err != nil {
+			log.Panicf("cannot create storage: %v", err)
+			return
+		}
+
+		est, err := mdb.CreateEstate("test", "lorem ipsum dolor sit amet")
+		if err != nil {
+			log.Panicf("cannot create estate: %v", err)
+			return
+		}
+
+		coll, err := mdb.CreateCollection("test", est, stor, "test-", "testing 123", 0)
+		if err != nil {
+			log.Panicf("cannot create collection: %v", err)
+			return
+		}
+	*/
+
+	coll, err := mdb.GetCollectionByName("test")
+	if err != nil {
+		log.Panicf("cannot load collection: %v", err)
+		return
+	}
+
+	master, err := mdb.CreateMaster(coll, "testing", "file://test/test.png", nil)
+	if err != nil {
+		log.Panicf("cannot create master: %v", err)
+		return
+	}
+	log.Infof("%v", master)
+
+	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix, mdb, log)
 	if err != nil {
 		log.Errorf("cannot create media handler: %v", mh)
 		return

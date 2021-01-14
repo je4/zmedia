@@ -48,6 +48,11 @@ type Cfg_S3 struct {
 	UseSSL          bool   `toml:"useSSL"`
 }
 
+type FileMap struct {
+	Alias  string
+	Folder string
+}
+
 type Config struct {
 	Logfile            string       `toml:"logfile"`
 	Loglevel           string       `toml:"loglevel"`
@@ -66,6 +71,7 @@ type Config struct {
 	DataPrefix         string       `toml:"dataprefix"`
 	StaticPrefix       string       `toml:"staticprefix"`
 	StaticFolder       string       `toml:"staticfolder"`
+	FileMap            []FileMap    `toml:"filemap"`
 	DBOld              Cfg_database `toml:"dbold"`
 	DB                 Cfg_database `toml:"db"`
 	S3                 []Cfg_S3     `toml:"s3"`

@@ -20,19 +20,18 @@ import (
 type MediaHandler struct {
 	log    *logging.Logger
 	mdb    *database.MediaDatabase
-	fss map[string]filesystem.FileSystem
 	prefix string
 }
 
-func NewMediaHandler(prefix string, mdb *database.MediaDatabase, fss []filesystem.FileSystem, log *logging.Logger) (*MediaHandler, error) {
+func buildFilename(coll *database.Collection, master *database.Master, action string, params []string) string {
+	return fmt.Sprintf("%v.%v-%x", coll.Id, master.Id, md5.Sum([]byte(fmt.Sprintf("%s/%s/%s/%s", coll.Name, master.Signature, action, strings.Join(params, "/")))))
+}
+
+func NewMediaHandler(prefix string, mdb *database.MediaDatabase, log *logging.Logger) (*MediaHandler, error) {
 	mh := &MediaHandler{
 		log:    log,
 		prefix: prefix,
 		mdb:    mdb,
-		fss: make(map[string]filesystem.FileSystem),
-	}
-	for _, fs := range fss {
-		mh.fss[fs.Protocol()] = fs
 	}
 	return mh, nil
 }
@@ -69,34 +68,8 @@ func (s *MediaHandler) DoPanic(writer http.ResponseWriter, status int, message s
 	s.DoPanicf(writer, status, message, jsonresult)
 }
 
-var pathRegexp = regexp.MustCompile(`^([^:]+://[^/]+)/([^/]+)/(.+)$`)
-
-func (mh *MediaHandler) fileOpenRead(path string, opts filesystem.FileGetOptions) (io.ReadCloser, int64, error) {
-	matches := pathRegexp.FindStringSubmatch(path)
-	if matches == nil {
-		return nil, 0, fmt.Errorf("invalid path - cannot load file %s from storage", path)
-	}
-	fs, ok :=  mh.fss[matches[1]]
-	if !ok {
-		return nil, 0, fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
-	}
-	return fs.FileOpenRead(matches[2], matches[3], opts)
-}
-
-func (mh *MediaHandler) fileWrite(path string, reader io.Reader, size int64, opts filesystem.FilePutOptions) error {
-	matches := pathRegexp.FindStringSubmatch(path)
-	if matches == nil {
-		return fmt.Errorf("invalid path - cannot load file %s from storage", path)
-	}
-	fs, ok :=  mh.fss[matches[1]]
-	if !ok {
-		return fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
-	}
-	return fs.FileWrite(matches[2], matches[3], reader, size, opts)
-}
-
 func (mh *MediaHandler) WriteFile(resp io.Writer, path string) error {
-	reader, _, err := mh.fileOpenRead(path, filesystem.FileGetOptions{})
+	reader, _, err := mh.mdb.FileOpenRead(path, filesystem.FileGetOptions{})
 	if err != nil {
 		return fmt.Errorf("cannot open file %s: %v", path, err)
 	}
@@ -157,22 +130,41 @@ func (mh *MediaHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		}
 		if action == "master" {
 			// ingest master
-			filename := filepath.Join(storage.DataDir, fmt.Sprintf("%x", md5.Sum([]byte(fmt.Sprintf("%s/%s/%s", collection, signature, strings.Join(params, "/"))))))
-			reader, size, err := mh.fileOpenRead(master.Urn, filesystem.FileGetOptions{})
+			filename := filepath.Join(storage.DataDir, buildFilename(coll, master, action, params))
+			reader, size, err := mh.mdb.FileOpenRead(master.Urn, filesystem.FileGetOptions{})
 			if err != nil {
 				mh.DoPanicf(resp, http.StatusInternalServerError, "cannot open master %s: %v", false, master.Urn, err)
 				return
 			}
-			if err := mh.fileWrite(filename, reader, size, filesystem.FilePutOptions{}); err != nil {
+			if err := mh.mdb.FileWrite(filename, reader, size, filesystem.FilePutOptions{}); err != nil {
 				reader.Close()
 				mh.DoPanicf(resp, http.StatusInternalServerError, "cannot write cache/master %s: %v", false, filename, err)
 				return
 			}
 			reader.Close()
+			cache, err := database.NewCache(mh.mdb,
+				0,
+				coll.Id,
+				master.Id,
+				action,
+				strings.Join(params, "/"),
+				"application/octet-stream",
+				size,
+				filename,
+				0,
+				0,
+				0,
+			)
+			if err != nil {
+				mh.DoPanicf(resp, http.StatusInternalServerError, "cannot create cache %s: %v", false, filename, err)
+				return
+			}
+			// todo: identify
 
-			// identify
-			now identify
-
+			if err := cache.Store(); err != nil {
+				mh.DoPanicf(resp, http.StatusInternalServerError, "cannot store cache %s: %v", false, filename, err)
+				return
+			}
 		}
 	}
 	switch err {
@@ -183,8 +175,6 @@ func (mh *MediaHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		mh.DoPanicf(resp, http.StatusBadRequest, "could not load cache for %s/%s/%s/%s", false, collection, signature, action, paramstr)
 		return
 	}
-
-
 }
 
 func (mh *MediaHandler) SetRoutes(router *mux.Router) error {

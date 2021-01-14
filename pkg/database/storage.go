@@ -37,10 +37,13 @@ func NewStorage(mdb *MediaDatabase, id int64, name, filebase, datadir, videodir,
 	if err != nil {
 		return nil, emperror.Wrapf(err, "invalid URL for storage [%v] %s - %s", id, name, filebase)
 	}
-	if strings.ToLower(urlbase.Scheme) != "fs" {
-		return nil, fmt.Errorf("invalid scheme for filesystem %s", filebase)
-	}
-	fs, ok := mdb.fss[strings.ToLower(urlbase.Host)]
+	/*
+		if strings.ToLower(urlbase.Scheme) != "fs" {
+			return nil, fmt.Errorf("invalid scheme for filesystem %s", filebase)
+		}
+	*/
+	fsname := strings.ToLower(fmt.Sprintf("%s://%s", urlbase.Scheme, urlbase.Host))
+	fs, ok := mdb.fss[fsname]
 	if !ok {
 		return nil, fmt.Errorf("unknown filesystem %s", filebase)
 	}
@@ -59,4 +62,8 @@ func NewStorage(mdb *MediaDatabase, id int64, name, filebase, datadir, videodir,
 		JWTKey:       jwtkey,
 	}
 	return stor, nil
+}
+
+func (s Storage) Store() error {
+	return nil
 }

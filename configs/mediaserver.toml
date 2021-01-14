@@ -16,6 +16,10 @@ staticprefix = "/static"
 mediaprefix = "/media"
 staticfolder = "C:\\daten\\go\\dev\\zmedia\\web\\static"
 
+[[filemap]]
+    alias = "static"
+    folder = "/mnt/daten/go/dev/zmedia/web/static"
+
 [dbold]
     servertype = "mysql"
     # dsn = "mediaserver:kn6Iy4mLuzH7HWPo@tcp(v000306.adm.ds.fhnw.ch:3306)/mediaserver?charset=utf8"

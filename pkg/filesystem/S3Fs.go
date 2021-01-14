@@ -13,27 +13,29 @@ import (
 )
 
 type S3Fs struct {
+	name     string
 	s3       *minio.Client
 	endpoint string
 }
 
-func NewS3Fs(Endpoint string,
-	AccessKeyId string,
-	SecretAccessKey string,
-	UseSSL bool) (*S3Fs, error) {
+func NewS3Fs(name,
+	endpoint string,
+	accessKeyId string,
+	secretAccessKey string,
+	useSSL bool) (*S3Fs, error) {
 	// connect to S3 / Minio
-	s3, err := minio.New(Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(AccessKeyId, SecretAccessKey, ""),
-		Secure: UseSSL,
+	s3, err := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyId, secretAccessKey, ""),
+		Secure: useSSL,
 	})
 	if err != nil {
-		return nil, emperror.Wrap(err, "cannot conntct to s3 instance")
+		return nil, emperror.Wrap(err, "cannot connect to s3 instance")
 	}
-	return &S3Fs{s3: s3, endpoint: Endpoint}, nil
+	return &S3Fs{name: name, s3: s3, endpoint: endpoint}, nil
 }
 
 func (fs *S3Fs) Protocol() string {
-	return fmt.Sprintf("s3://%s", fs.endpoint)
+	return fmt.Sprintf("s3://%s", fs.name)
 }
 
 func (fs *S3Fs) String() string {

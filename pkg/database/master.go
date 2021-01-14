@@ -20,6 +20,7 @@ func NewMaster(mdb *MediaDatabase, coll *Collection, id, parentid int64, signatu
 	master := &Master{
 		db:           mdb,
 		collection:   coll,
+		Signature:    signature,
 		Id:           id,
 		ParentId:     parentid,
 		CollectionId: coll.Id,
