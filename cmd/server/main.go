@@ -115,21 +115,22 @@ func main() {
 			return
 		}
 	*/
+	/*
+		coll, err := mdb.GetCollectionByName("test")
+		if err != nil {
+			log.Panicf("cannot load collection: %v", err)
+			return
+		}
 
-	coll, err := mdb.GetCollectionByName("test")
-	if err != nil {
-		log.Panicf("cannot load collection: %v", err)
-		return
-	}
+		master, err := mdb.CreateMaster(coll, "testing", "file://test/test.png", nil)
+		if err != nil {
+			log.Panicf("cannot create master: %v", err)
+			return
+		}
+		log.Infof("%v", master)
+	*/
 
-	master, err := mdb.CreateMaster(coll, "testing", "file://test/test.png", nil)
-	if err != nil {
-		log.Panicf("cannot create master: %v", err)
-		return
-	}
-	log.Infof("%v", master)
-
-	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix, mdb, log)
+	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix, mdb, log, fss...)
 	if err != nil {
 		log.Errorf("cannot create media handler: %v", mh)
 		return

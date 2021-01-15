@@ -6,8 +6,6 @@ import (
 	"github.com/goph/emperror"
 	"github.com/gosimple/slug"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
-	"io"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -75,31 +73,6 @@ func (db *MediaDatabase) Init() error {
 		return nil
 	})
 	return nil
-}
-
-var pathRegexp = regexp.MustCompile(`^([^:]+://[^/]+)/([^/]+)/(.+)$`)
-
-func (db *MediaDatabase) FileOpenRead(path string, opts filesystem.FileGetOptions) (io.ReadCloser, int64, error) {
-	matches := pathRegexp.FindStringSubmatch(path)
-	if matches == nil {
-		return nil, 0, fmt.Errorf("invalid path - cannot load file %s from storage", path)
-	}
-	fs, ok := db.fss[matches[1]]
-	if !ok {
-		return nil, 0, fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
-	}
-	return fs.FileOpenRead(matches[2], matches[3], opts)
-}
-func (db *MediaDatabase) FileWrite(path string, reader io.Reader, size int64, opts filesystem.FilePutOptions) error {
-	matches := pathRegexp.FindStringSubmatch(path)
-	if matches == nil {
-		return fmt.Errorf("invalid path - cannot load file %s from storage", path)
-	}
-	fs, ok := db.fss[matches[1]]
-	if !ok {
-		return fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
-	}
-	return fs.FileWrite(matches[2], matches[3], reader, size, opts)
 }
 
 func (db *MediaDatabase) GetEstateById(id int64) (*Estate, error) {

@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"github.com/goph/emperror"
 	"github.com/gorilla/mux"
 	"github.com/je4/zmedia/v2/pkg/database"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
@@ -20,6 +21,7 @@ import (
 type MediaHandler struct {
 	log    *logging.Logger
 	mdb    *database.MediaDatabase
+	fss    map[string]filesystem.FileSystem
 	prefix string
 }
 
@@ -27,13 +29,42 @@ func buildFilename(coll *database.Collection, master *database.Master, action st
 	return fmt.Sprintf("%v.%v-%x", coll.Id, master.Id, md5.Sum([]byte(fmt.Sprintf("%s/%s/%s/%s", coll.Name, master.Signature, action, strings.Join(params, "/")))))
 }
 
-func NewMediaHandler(prefix string, mdb *database.MediaDatabase, log *logging.Logger) (*MediaHandler, error) {
+func NewMediaHandler(prefix string, mdb *database.MediaDatabase, log *logging.Logger, fss ...filesystem.FileSystem) (*MediaHandler, error) {
 	mh := &MediaHandler{
 		log:    log,
 		prefix: prefix,
 		mdb:    mdb,
+		fss:    make(map[string]filesystem.FileSystem),
+	}
+	for _, fs := range fss {
+		mh.fss[fs.Protocol()] = fs
 	}
 	return mh, nil
+}
+
+var pathRegexp = regexp.MustCompile(`^([^:]+://[^/]+)/([^/]+)/(.+)$`)
+
+func (mh *MediaHandler) FileOpenRead(path string, opts filesystem.FileGetOptions) (io.ReadCloser, int64, error) {
+	matches := pathRegexp.FindStringSubmatch(path)
+	if matches == nil {
+		return nil, 0, fmt.Errorf("invalid path - cannot load file %s from storage", path)
+	}
+	fs, ok := mh.fss[matches[1]]
+	if !ok {
+		return nil, 0, fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
+	}
+	return fs.FileOpenRead(matches[2], matches[3], opts)
+}
+func (mh *MediaHandler) FileWrite(path string, reader io.Reader, size int64, opts filesystem.FilePutOptions) error {
+	matches := pathRegexp.FindStringSubmatch(path)
+	if matches == nil {
+		return fmt.Errorf("invalid path - cannot load file %s from storage", path)
+	}
+	fs, ok := mh.fss[matches[1]]
+	if !ok {
+		return fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
+	}
+	return fs.FileWrite(matches[2], matches[3], reader, size, opts)
 }
 
 var errorTemplate = template.Must(template.New("error").Parse(`<html>
@@ -69,7 +100,7 @@ func (s *MediaHandler) DoPanic(writer http.ResponseWriter, status int, message s
 }
 
 func (mh *MediaHandler) WriteFile(resp io.Writer, path string) error {
-	reader, _, err := mh.mdb.FileOpenRead(path, filesystem.FileGetOptions{})
+	reader, _, err := mh.FileOpenRead(path, filesystem.FileGetOptions{})
 	if err != nil {
 		return fmt.Errorf("cannot open file %s: %v", path, err)
 	}
@@ -78,6 +109,54 @@ func (mh *MediaHandler) WriteFile(resp io.Writer, path string) error {
 		return fmt.Errorf("read file %s: %v", path, err)
 	}
 	return nil
+}
+
+func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Master, *database.Cache, error) {
+	coll, err := mh.mdb.GetCollectionByName(collection)
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot load collection %s", collection)
+	}
+	storage, err := coll.GetStorage()
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot load storage for %s", collection)
+	}
+	master, err := mh.mdb.GetMaster(coll, signature)
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot load master %s/%s", collection, signature)
+	}
+	// ingest master
+	filename := filepath.Join(storage.DataDir, buildFilename(coll, master, "master", []string{}))
+	reader, size, err := mh.FileOpenRead(master.Urn, filesystem.FileGetOptions{})
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot open master %s", master.Urn)
+	}
+	if err := mh.FileWrite(filename, reader, size, filesystem.FilePutOptions{}); err != nil {
+		reader.Close()
+		return nil, nil, emperror.Wrapf(err, "cannot write cache/master %s", filename)
+	}
+	reader.Close()
+	cache, err := database.NewCache(mh.mdb,
+		0,
+		coll.Id,
+		master.Id,
+		"master",
+		"",
+		"application/octet-stream",
+		size,
+		filename,
+		0,
+		0,
+		0,
+	)
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot create cache %s", filename)
+	}
+	// todo: identify
+
+	if err := cache.Store(); err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot store cache %s", filename)
+	}
+	return master, cache, nil
 }
 
 func (mh *MediaHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
@@ -113,59 +192,12 @@ func (mh *MediaHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if err == database.ErrNotFound {
-		coll, err := mh.mdb.GetCollectionByName(collection)
+		master, cache, err := mh.ingestMaster(collection, signature)
 		if err != nil {
-			mh.DoPanicf(resp, http.StatusInternalServerError, "cannot load collection %s: %v", false, collection, err)
+			mh.DoPanicf(resp, http.StatusInternalServerError, "cannot ingest master %s/%s: %v", false, collection, signature, err)
 			return
 		}
-		storage, err := coll.GetStorage()
-		if err != nil {
-			mh.DoPanicf(resp, http.StatusInternalServerError, "cannot load storage for %s: %v", false, collection, err)
-			return
-		}
-		master, err := mh.mdb.GetMaster(coll, signature)
-		if err != nil {
-			mh.DoPanicf(resp, http.StatusInternalServerError, "cannot load master %s/%s: %v", false, collection, signature, err)
-			return
-		}
-		if action == "master" {
-			// ingest master
-			filename := filepath.Join(storage.DataDir, buildFilename(coll, master, action, params))
-			reader, size, err := mh.mdb.FileOpenRead(master.Urn, filesystem.FileGetOptions{})
-			if err != nil {
-				mh.DoPanicf(resp, http.StatusInternalServerError, "cannot open master %s: %v", false, master.Urn, err)
-				return
-			}
-			if err := mh.mdb.FileWrite(filename, reader, size, filesystem.FilePutOptions{}); err != nil {
-				reader.Close()
-				mh.DoPanicf(resp, http.StatusInternalServerError, "cannot write cache/master %s: %v", false, filename, err)
-				return
-			}
-			reader.Close()
-			cache, err := database.NewCache(mh.mdb,
-				0,
-				coll.Id,
-				master.Id,
-				action,
-				strings.Join(params, "/"),
-				"application/octet-stream",
-				size,
-				filename,
-				0,
-				0,
-				0,
-			)
-			if err != nil {
-				mh.DoPanicf(resp, http.StatusInternalServerError, "cannot create cache %s: %v", false, filename, err)
-				return
-			}
-			// todo: identify
-
-			if err := cache.Store(); err != nil {
-				mh.DoPanicf(resp, http.StatusInternalServerError, "cannot store cache %s: %v", false, filename, err)
-				return
-			}
-		}
+		mh.log.Infof("master: %v // %v", master, cache)
 	}
 	switch err {
 	case database.ErrNotFound:

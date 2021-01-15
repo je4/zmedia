@@ -2,6 +2,10 @@
 -- PostgreSQL database dump
 --
 
+--
+-- "C:/Program Files/PostgreSQL/13/bin/pg_dump.exe" --file=C:\daten\go\dev\zmedia\media_public-dump.sql --dbname=media --username=postgres --host=localhost --port=5433 -v --format=p --exclude-table=public.oai* --schema=public
+--
+
 -- Dumped from database version 11.5 (Ubuntu 11.5-1.pgdg18.04+1)
 -- Dumped by pg_dump version 13.1
 
