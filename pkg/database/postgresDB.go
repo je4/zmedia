@@ -326,7 +326,7 @@ func (db *PostgresDB) CreateCollection(mdb *MediaDatabase, name string, estate *
 
 func (db *PostgresDB) GetMaster(mdb *MediaDatabase, collection *Collection, signature string) (*Master, error) {
 	signature = strings.ToLower(signature)
-	sqlstr := fmt.Sprintf("SELECT masterid, urn, type, subtype, objecttype, status, parentid, mimetype, error, sha256, metadata FROM %s.master WHERE collectinid=$1, signature=$2", db.schema)
+	sqlstr := fmt.Sprintf("SELECT masterid, urn, type, subtype, objecttype, status, parentid, mimetype, error, sha256, metadata FROM %s.master WHERE collectionid=$1 AND signature=$2", db.schema)
 	row := db.db.QueryRow(sqlstr, collection.Id, signature)
 	var MasterId int64
 	var URN, Status string

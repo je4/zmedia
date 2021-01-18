@@ -53,6 +53,19 @@ type FileMap struct {
 	Folder string
 }
 
+type Endpoint struct {
+	Host string `toml:"host"`
+	Port int    `toml:"port"`
+}
+
+type SSHTunnel struct {
+	User           string   `toml:"user"`
+	PrivateKey     string   `toml:"privatekey"`
+	LocalEndpoint  Endpoint `toml:"localendpoint"`
+	ServerEndpoint Endpoint `toml:"serverendpoint"`
+	RemoteEndpoint Endpoint `toml:"remoteendpoint"`
+}
+
 type Config struct {
 	Logfile            string       `toml:"logfile"`
 	Loglevel           string       `toml:"loglevel"`
@@ -75,6 +88,7 @@ type Config struct {
 	DBOld              Cfg_database `toml:"dbold"`
 	DB                 Cfg_database `toml:"db"`
 	S3                 []Cfg_S3     `toml:"s3"`
+	SSHTunnel          SSHTunnel    `toml:"sshtunnel"`
 }
 
 func LoadConfig(fp string) Config {

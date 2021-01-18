@@ -40,3 +40,18 @@ staticfolder = "C:\\daten\\go\\dev\\zmedia\\web\\static"
     accessKeyId = "media"
     secretAccessKey = "DzqApK0rK7tRlbKlBG2JymDJeHvPMfOd"
     useSSL = true
+
+[sshtunnel]
+    user = "root"
+    privatekey = "/mnt/daten/keys/putty_ed25519.priv.openssh"
+    [sshtunnel.localendpoint]
+        port = 5433
+        host = "localhost"
+
+    [sshtunnel.serverendpoint]
+        port = 22
+        host = "ba14ns21403.fhnw.ch"
+
+    [sshtunnel.remoteendpoint]
+        port = 5432
+        host = "v000306.adm.ds.fhnw.ch"

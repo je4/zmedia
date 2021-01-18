@@ -12,5 +12,5 @@ type FFProbe struct {
 var metadata ffmpeg_models.Metadata
 
 func (fp *FFProbe) Index(reader io.Reader) (map[string]interface{}, error) {
-
+	return nil, nil
 }

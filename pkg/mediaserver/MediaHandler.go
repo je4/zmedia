@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/je4/zmedia/v2/pkg/database"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
+	"github.com/je4/zmedia/v2/pkg/indexer"
 	"github.com/op/go-logging"
 	"html/template"
 	"io"
@@ -68,8 +69,8 @@ func (mh *MediaHandler) FileWrite(path string, reader io.Reader, size int64, opt
 }
 
 var errorTemplate = template.Must(template.New("error").Parse(`<html>
-<head><title>{.Error}</title></head>
-<body><h1>{.Error}</h1><h2>{.Message}</h2></body>
+<head><title>{{.Error}}</title></head>
+<body><h1>{{.Error}}</h1><h2>{{.Message}}</h2></body>
 </html>
 `))
 
@@ -125,23 +126,26 @@ func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Ma
 		return nil, nil, emperror.Wrapf(err, "cannot load master %s/%s", collection, signature)
 	}
 	// ingest master
-	filename := filepath.Join(storage.DataDir, buildFilename(coll, master, "master", []string{}))
+	filename := filepath.Join(storage.Filebase, storage.DataDir, buildFilename(coll, master, "master", []string{}))
 	reader, size, err := mh.FileOpenRead(master.Urn, filesystem.FileGetOptions{})
 	if err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot open master %s", master.Urn)
 	}
-	if err := mh.FileWrite(filename, reader, size, filesystem.FilePutOptions{}); err != nil {
+	var header indexer.HeaderMime
+	newreader := io.TeeReader(reader, &header)
+	if err := mh.FileWrite(filename, newreader, size, filesystem.FilePutOptions{}); err != nil {
 		reader.Close()
 		return nil, nil, emperror.Wrapf(err, "cannot write cache/master %s", filename)
 	}
 	reader.Close()
+	mimetype := header.GetMime()
 	cache, err := database.NewCache(mh.mdb,
 		0,
 		coll.Id,
 		master.Id,
 		"master",
 		"",
-		"application/octet-stream",
+		mimetype,
 		size,
 		filename,
 		0,

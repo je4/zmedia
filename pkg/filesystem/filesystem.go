@@ -3,6 +3,7 @@ package filesystem
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 )
 
@@ -40,6 +41,7 @@ type FolderCreateOptions struct {
 type FileSystem interface {
 	BucketExists(folder string) (bool, error)
 	BucketCreate(folder string, opts FolderCreateOptions) error
+	GETUrl(folder, name string) (*url.URL, error)
 	FileExists(folder, name string) (bool, error)
 	FileGet(folder, name string, opts FileGetOptions) ([]byte, error)
 	FilePut(folder, name string, data []byte, opts FilePutOptions) error

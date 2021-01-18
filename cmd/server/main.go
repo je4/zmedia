@@ -7,6 +7,7 @@ import (
 	"github.com/je4/zmedia/v2/pkg/database"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
 	"github.com/je4/zmedia/v2/pkg/mediaserver"
+	sshtunnel "github.com/je4/zmedia/v2/pkg/sshTunnel"
 	_ "github.com/lib/pq"
 	"io"
 	"os"
@@ -35,6 +36,38 @@ func main() {
 		}
 		defer f.Close()
 		accesslog = f
+	}
+
+	if config.SSHTunnel.User != "" && config.SSHTunnel.PrivateKey != "" {
+		tunnel, err := sshtunnel.NewSSHTunnel(
+			config.SSHTunnel.User,
+			config.SSHTunnel.PrivateKey,
+			&sshtunnel.Endpoint{
+				Host: config.SSHTunnel.LocalEndpoint.Host,
+				Port: config.SSHTunnel.LocalEndpoint.Port,
+			},
+			&sshtunnel.Endpoint{
+				Host: config.SSHTunnel.ServerEndpoint.Host,
+				Port: config.SSHTunnel.ServerEndpoint.Port,
+			},
+			&sshtunnel.Endpoint{
+				Host: config.SSHTunnel.RemoteEndpoint.Host,
+				Port: config.SSHTunnel.RemoteEndpoint.Port,
+			},
+			log,
+		)
+		if err != nil {
+			log.Errorf("cannot create sshtunnel %v@%v:%v - %v", config.SSHTunnel.User, config.SSHTunnel.ServerEndpoint.Host, &config.SSHTunnel.ServerEndpoint.Port, err)
+			return
+		}
+		go func() {
+			err = tunnel.Start()
+			if err != nil {
+				log.Errorf("cannot create sshtunnel %v - %v", tunnel.String(), err)
+				return
+			}
+		}()
+		time.Sleep(2 * time.Second)
 	}
 
 	var fss []filesystem.FileSystem

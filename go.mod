@@ -15,7 +15,8 @@ require (
 	github.com/lucas-clemente/quic-go v0.18.1
 	github.com/minio/minio-go/v7 v7.0.5
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
-	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkg/sftp v1.12.0
 	github.com/segmentio/ksuid v1.0.3
+	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
 	gopkg.in/gographics/imagick.v3 v3.3.0
 )

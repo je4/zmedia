@@ -6,6 +6,7 @@ import (
 	"github.com/op/go-logging"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -36,7 +37,7 @@ func NewLocalFs(name, basepath string, logger *logging.Logger) (*LocalFs, error)
 	if !FolderExists(basepath) {
 		return nil, fmt.Errorf("path %v does not exists", basepath)
 	}
-	return &LocalFs{basepath: basepath, logger: logger}, nil
+	return &LocalFs{name: name, basepath: basepath, logger: logger}, nil
 }
 
 func (fs *LocalFs) Protocol() string {
@@ -59,6 +60,11 @@ func (fs *LocalFs) FileExists(folder, name string) (bool, error) {
 
 func (fs *LocalFs) BucketExists(folder string) (bool, error) {
 	return FolderExists(filepath.Join(fs.basepath, folder)), nil
+}
+
+func (fs *LocalFs) GETUrl(folder, name string) (*url.URL, error) {
+	path := filepath.Join(fs.basepath, folder)
+	return url.Parse(path)
 }
 
 func (fs *LocalFs) BucketCreate(folder string, opts FolderCreateOptions) error {

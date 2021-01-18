@@ -9,7 +9,9 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"time"
 )
 
 type S3Fs struct {
@@ -55,6 +57,11 @@ func (fs *S3Fs) FileStat(folder, name string, opts FileStatOptions) (os.FileInfo
 		return nil, emperror.Wrapf(err, "cannot get file info for %v/%v", folder, name)
 	}
 	return NewS3FileInfo(folder, name, sinfo), nil
+}
+
+func (fs *S3Fs) GETUrl(folder, name string) (*url.URL, error) {
+	reqParams := make(url.Values)
+	return fs.s3.PresignedGetObject(context.Background(), folder, name, time.Second*80, reqParams)
 }
 
 func (fs *S3Fs) FileExists(folder, name string) (bool, error) {
