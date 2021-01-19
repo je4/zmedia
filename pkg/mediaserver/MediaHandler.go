@@ -24,18 +24,20 @@ type MediaHandler struct {
 	mdb    *database.MediaDatabase
 	fss    map[string]filesystem.FileSystem
 	prefix string
+	idx    *indexer.Indexer
 }
 
 func buildFilename(coll *database.Collection, master *database.Master, action string, params []string) string {
 	return fmt.Sprintf("%v.%v-%x", coll.Id, master.Id, md5.Sum([]byte(fmt.Sprintf("%s/%s/%s/%s", coll.Name, master.Signature, action, strings.Join(params, "/")))))
 }
 
-func NewMediaHandler(prefix string, mdb *database.MediaDatabase, log *logging.Logger, fss ...filesystem.FileSystem) (*MediaHandler, error) {
+func NewMediaHandler(prefix string, mdb *database.MediaDatabase, idx *indexer.Indexer, log *logging.Logger, fss ...filesystem.FileSystem) (*MediaHandler, error) {
 	mh := &MediaHandler{
 		log:    log,
 		prefix: prefix,
 		mdb:    mdb,
 		fss:    make(map[string]filesystem.FileSystem),
+		idx:    idx,
 	}
 	for _, fs := range fss {
 		mh.fss[fs.Protocol()] = fs
@@ -126,26 +128,36 @@ func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Ma
 		return nil, nil, emperror.Wrapf(err, "cannot load master %s/%s", collection, signature)
 	}
 	// ingest master
-	filename := filepath.Join(storage.Filebase, storage.DataDir, buildFilename(coll, master, "master", []string{}))
+	filename := storage.Filebase
+	filename += "/" + filepath.Join(storage.DataDir, buildFilename(coll, master, "master", []string{}))
 	reader, size, err := mh.FileOpenRead(master.Urn, filesystem.FileGetOptions{})
 	if err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot open master %s", master.Urn)
 	}
-	var header indexer.HeaderMime
-	newreader := io.TeeReader(reader, &header)
+	header, err := indexer.NewSideStream(2048)
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot create sidestream %s", master.Urn)
+	}
+	newreader := io.TeeReader(reader, header)
 	if err := mh.FileWrite(filename, newreader, size, filesystem.FilePutOptions{}); err != nil {
 		reader.Close()
 		return nil, nil, emperror.Wrapf(err, "cannot write cache/master %s", filename)
 	}
 	reader.Close()
-	mimetype := header.GetMime()
+	p := header.GetBytes()
+	master.Type, master.Subtype, master.Mimetype, err = mh.idx.GetType(p)
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot get type for %s", filename)
+	}
+	master.Sha256 = header.GetSHA256()
+
 	cache, err := database.NewCache(mh.mdb,
 		0,
 		coll.Id,
 		master.Id,
 		"master",
 		"",
-		mimetype,
+		master.Mimetype,
 		size,
 		filename,
 		0,
@@ -155,10 +167,13 @@ func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Ma
 	if err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot create cache %s", filename)
 	}
-	// todo: identify
 
 	if err := cache.Store(); err != nil {
-		return nil, nil, emperror.Wrapf(err, "cannot store cache %s", filename)
+		return nil, nil, emperror.Wrapf(err, "cannot store master cache for %s/%s", coll.Name, master.Signature)
+	}
+
+	if err := master.Store(); err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot store master %s", master.Signature)
 	}
 	return master, cache, nil
 }

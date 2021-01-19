@@ -347,7 +347,8 @@ func (db *PostgresDB) GetMaster(mdb *MediaDatabase, collection *Collection, sign
 			return nil, emperror.Wrapf(err, "cannot unmarshal metadata for %s/%s - %s", collection.Name, signature, MetadataJSON)
 		}
 	}
-	master, err := NewMaster(mdb, collection, MasterId, ParentId.Int64, signature, URN, Type.String, SubType.String, Mimetype.String, ObjectType.String, SHA256.String, Metadata)
+	master, err := NewMaster(mdb, collection, MasterId, ParentId.Int64, signature, URN, Status, Type.String,
+		SubType.String, Mimetype.String, "", ObjectType.String, SHA256.String, Metadata)
 	if err != nil {
 		return nil, emperror.Wrapf(err, "cannot instantiate master %s/%s", collection.Name, signature)
 	}
@@ -377,7 +378,8 @@ func (db *PostgresDB) GetMasterById(mdb *MediaDatabase, collection *Collection, 
 			return nil, emperror.Wrapf(err, "cannot unmarshal metadata for %s/%s - %s", collection.Name, Signature, MetadataJSON)
 		}
 	}
-	master, err := NewMaster(mdb, collection, masterid, ParentId.Int64, Signature, URN, Type.String, SubType.String, Mimetype.String, ObjectType.String, SHA256.String, Metadata)
+	master, err := NewMaster(mdb, collection, masterid, ParentId.Int64, Signature, URN, Status, Type.String,
+		SubType.String, Mimetype.String, "", ObjectType.String, SHA256.String, Metadata)
 	if err != nil {
 		return nil, emperror.Wrapf(err, "cannot instantiate master %s/%s", collection.Name, Signature)
 	}
@@ -406,14 +408,82 @@ func (db *PostgresDB) CreateMaster(mdb *MediaDatabase, collection *Collection, s
 	}
 	return mdb.GetMasterById(collection, LastInsertId)
 }
+func (db *PostgresDB) StoreMaster(mdb *MediaDatabase, master *Master) error {
+	metastring, err := json.MarshalIndent(master.Metadata, "", "  ")
+	if err != nil {
+		return emperror.Wrapf(err, "cannot marshal metadata - %v", master.Metadata)
+	}
+	if master.Id == 0 {
+		sqlstr := fmt.Sprintf("INSERT INTO %s.master (collectionid, signature, urn, type, subtype, objecttype,"+
+			" status, parentid, mimetype, error, sha256, metadata)"+
+			" VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning masterid", db.schema)
+		sqlparams := []interface{}{
+			master.CollectionId,
+			master.Signature,
+			master.Urn,
+			master.Type,
+			master.Subtype,
+			master.Objecttype,
+			master.Status,
+			master.ParentId,
+			master.Mimetype,
+			master.Error,
+			master.Sha256,
+			metastring,
+		}
+		db.logger.Debugf("SQL: %s - %v", sqlstr, sqlparams)
+		row := db.db.QueryRow(sqlstr, sqlparams...)
+		var masterid int64
+		if err := row.Scan(&masterid); err != nil {
+			return emperror.Wrapf(err, "cannot execute %s - %v", sqlstr, sqlparams)
+		}
+		master.Id = masterid
+	} else {
+		sqlstr := fmt.Sprintf("UPDATE %s.master SET collectionid=$1, signature=$2, urn=$3, type=$4, subtype=$5,"+
+			" objecttype=$6, status=$7, parentid=$8, mimetype=$9, error=$10, sha256=$11, metadata=$12 WHERE masterid=$6", db.schema)
+		sqlparams := []interface{}{
+			master.CollectionId,
+			master.Signature,
+			master.Urn,
+			master.Type,
+			master.Subtype,
+			master.Objecttype,
+			master.Status,
+			master.ParentId,
+			master.Mimetype,
+			master.Error,
+			master.Sha256,
+			metastring,
+			master.Id,
+		}
+		db.logger.Debugf("SQL: %s - %v", sqlstr, sqlparams)
+		result, err := db.db.Exec(sqlstr, sqlparams...)
+		if err != nil {
+			return emperror.Wrapf(err, "%s - %v", sqlstr, sqlparams)
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return emperror.Wrap(err, "cannot get affected rows")
+		}
+		if rowsAffected != 1 {
+			return fmt.Errorf("affected rows %v != 1", rowsAffected)
+		}
+
+	}
+
+	return nil
+}
 
 func (db *PostgresDB) StoreCache(mdb *MediaDatabase, cache *Cache) error {
 	if cache.Id == 0 {
-		sqlstr := fmt.Sprintf("INSERT INTO %s.cache (masterid,storageid,path,filesize,mimetype,width,height,duration)"+
-			"        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9) returning cacheid", db.schema)
+		sqlstr := fmt.Sprintf("INSERT INTO %s.cache (collectionid,masterid,storageid,action,param,path,filesize,mimetype,width,height,duration)"+
+			"        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning cacheid", db.schema)
 		sqlparams := []interface{}{
+			cache.collection.Id,
 			cache.MasterId,
 			cache.collection.StorageId,
+			cache.Action,
+			cache.Params,
 			cache.Path,
 			cache.Filesize,
 			cache.Mimetype,
@@ -430,7 +500,7 @@ func (db *PostgresDB) StoreCache(mdb *MediaDatabase, cache *Cache) error {
 		cache.Id = cacheid
 	} else {
 		sqlstr := fmt.Sprintf("UPDATE %s.cache "+
-			"   SET masterid=$1,storageid=$2,path=$3,filesize=$4,mimetype=$5,width=$6,height=$7,duration=$8 WHERE cacheid=$9)", db.schema)
+			"   SET masterid=$1,storageid=$2,path=$3,filesize=$4,mimetype=$5,width=$6,height=$7,duration=$8 WHERE cacheid=$9", db.schema)
 		sqlparams := []interface{}{
 			cache.MasterId,
 			cache.collection.StorageId,

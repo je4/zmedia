@@ -10,13 +10,15 @@ type Master struct {
 	Urn          string         `json:"urn"`
 	Type         string         `json:"type,omitempty"`
 	Subtype      string         `json:"subtype,omitempty"`
+	Status       string         `json:"status,omitempty"`
 	Mimetype     string         `json:"mimetype,omitempty"`
 	Objecttype   string         `json:"objecttype,omitempty"`
 	Sha256       string         `json:"sha256"`
 	Metadata     interface{}    `json:"metadata,omitempty"`
+	Error        string         `json:"error,omitempty"`
 }
 
-func NewMaster(mdb *MediaDatabase, coll *Collection, id, parentid int64, signature, urn, _type, subtype, mimetype, objecttype, sha256 string, metadata interface{}) (*Master, error) {
+func NewMaster(mdb *MediaDatabase, coll *Collection, id, parentid int64, signature, urn, status, _type, subtype, mimetype, error, objecttype, sha256 string, metadata interface{}) (*Master, error) {
 	master := &Master{
 		db:           mdb,
 		collection:   coll,
@@ -25,9 +27,11 @@ func NewMaster(mdb *MediaDatabase, coll *Collection, id, parentid int64, signatu
 		ParentId:     parentid,
 		CollectionId: coll.Id,
 		Urn:          urn,
+		Status:       status,
 		Type:         _type,
 		Subtype:      subtype,
 		Mimetype:     mimetype,
+		Error:        error,
 		Objecttype:   objecttype,
 		Sha256:       sha256,
 		Metadata:     metadata,
@@ -44,4 +48,8 @@ func (m *Master) GetCollection() (*Collection, error) {
 		}
 	}
 	return m.collection, nil
+}
+
+func (m *Master) Store() error {
+	return m.db.db.StoreMaster(m.db, m)
 }

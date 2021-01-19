@@ -1,5 +1,7 @@
 package database
 
+import "github.com/goph/emperror"
+
 type Cache struct {
 	db           *MediaDatabase `json:"-"`
 	collection   *Collection    `json:"-"`
@@ -18,6 +20,7 @@ type Cache struct {
 }
 
 func NewCache(db *MediaDatabase, id, collectionid, masterid int64, action string, params string, mimetype string, filesize int64, path string, width, height, duration int64) (*Cache, error) {
+	var err error
 	cache := &Cache{
 		db:           db,
 		Id:           id,
@@ -31,6 +34,10 @@ func NewCache(db *MediaDatabase, id, collectionid, masterid int64, action string
 		Width:        width,
 		Height:       height,
 		Duration:     duration,
+	}
+	cache.collection, err = db.GetCollectionById(collectionid)
+	if err != nil {
+		return nil, emperror.Wrapf(err, "cannot get collection %v", collectionid)
 	}
 	return cache, nil
 }

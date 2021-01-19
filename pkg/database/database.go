@@ -23,6 +23,7 @@ type Database interface {
 	GetMaster(mdb *MediaDatabase, collection *Collection, signature string) (*Master, error)
 	GetMasterById(mdb *MediaDatabase, collection *Collection, masterid int64) (*Master, error)
 	CreateMaster(mdb *MediaDatabase, collection *Collection, signature, urn string, parent *Master) (*Master, error)
+	StoreMaster(db *MediaDatabase, m *Master) error
 
 	GetCacheByMaster(mdb *MediaDatabase, master *Master, action string, paramstr string) (*Cache, error)
 	GetCache(mdb *MediaDatabase, collection, signature, action string, paramstr string) (*Cache, error)

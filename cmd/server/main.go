@@ -6,6 +6,7 @@ import (
 	"flag"
 	"github.com/je4/zmedia/v2/pkg/database"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
+	"github.com/je4/zmedia/v2/pkg/indexer"
 	"github.com/je4/zmedia/v2/pkg/mediaserver"
 	sshtunnel "github.com/je4/zmedia/v2/pkg/sshTunnel"
 	_ "github.com/lib/pq"
@@ -39,34 +40,36 @@ func main() {
 	}
 
 	if config.SSHTunnel.User != "" && config.SSHTunnel.PrivateKey != "" {
+		tunnels := map[string]*sshtunnel.SourceDestination{}
+		tunnels["postgres"] = &sshtunnel.SourceDestination{
+			Local: &sshtunnel.Endpoint{
+				Host: config.SSHTunnel.LocalEndpoint.Host,
+				Port: config.SSHTunnel.LocalEndpoint.Port,
+			},
+			Remote: &sshtunnel.Endpoint{
+				Host: config.SSHTunnel.RemoteEndpoint.Host,
+				Port: config.SSHTunnel.RemoteEndpoint.Port,
+			},
+		}
 		tunnel, err := sshtunnel.NewSSHTunnel(
 			config.SSHTunnel.User,
 			config.SSHTunnel.PrivateKey,
 			&sshtunnel.Endpoint{
-				Host: config.SSHTunnel.LocalEndpoint.Host,
-				Port: config.SSHTunnel.LocalEndpoint.Port,
-			},
-			&sshtunnel.Endpoint{
 				Host: config.SSHTunnel.ServerEndpoint.Host,
 				Port: config.SSHTunnel.ServerEndpoint.Port,
 			},
-			&sshtunnel.Endpoint{
-				Host: config.SSHTunnel.RemoteEndpoint.Host,
-				Port: config.SSHTunnel.RemoteEndpoint.Port,
-			},
+			tunnels,
 			log,
 		)
 		if err != nil {
 			log.Errorf("cannot create sshtunnel %v@%v:%v - %v", config.SSHTunnel.User, config.SSHTunnel.ServerEndpoint.Host, &config.SSHTunnel.ServerEndpoint.Port, err)
 			return
 		}
-		go func() {
-			err = tunnel.Start()
-			if err != nil {
-				log.Errorf("cannot create sshtunnel %v - %v", tunnel.String(), err)
-				return
-			}
-		}()
+		if err := tunnel.Start(); err != nil {
+			log.Errorf("cannot create sshtunnel %v - %v", tunnel.String(), err)
+			return
+		}
+		defer tunnel.Close()
 		time.Sleep(2 * time.Second)
 	}
 
@@ -109,7 +112,17 @@ func main() {
 		return
 	}
 
+	idx, err := indexer.NewIndexer(config.Indexer.Siegfried, config.Indexer.FFProbe, "")
+	if err != nil {
+		log.Errorf("cannot instantiate indexer: %v", err)
+		return
+	}
+
 	mdb, err := database.NewMediaDatabase(pg, fss...)
+	if err != nil {
+		log.Errorf("cannot instantiate mediadatabase: %v", err)
+		return
+	}
 
 	srv, err := mediaserver.NewServerHTTP3(
 		config.HTTPSAddr,
@@ -163,7 +176,7 @@ func main() {
 		log.Infof("%v", master)
 	*/
 
-	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix, mdb, log, fss...)
+	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix, mdb, idx, log, fss...)
 	if err != nil {
 		log.Errorf("cannot create media handler: %v", mh)
 		return

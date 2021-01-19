@@ -66,6 +66,11 @@ type SSHTunnel struct {
 	RemoteEndpoint Endpoint `toml:"remoteendpoint"`
 }
 
+type Indexer struct {
+	Siegfried string `toml:"siegfried"`
+	FFProbe   string `toml:"ffprobe"`
+}
+
 type Config struct {
 	Logfile            string       `toml:"logfile"`
 	Loglevel           string       `toml:"loglevel"`
@@ -89,6 +94,7 @@ type Config struct {
 	DB                 Cfg_database `toml:"db"`
 	S3                 []Cfg_S3     `toml:"s3"`
 	SSHTunnel          SSHTunnel    `toml:"sshtunnel"`
+	Indexer            Indexer      `toml:"indexer"`
 }
 
 func LoadConfig(fp string) Config {

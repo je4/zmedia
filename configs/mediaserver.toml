@@ -16,6 +16,10 @@ staticprefix = "/static"
 mediaprefix = "/media"
 staticfolder = "C:\\daten\\go\\dev\\zmedia\\web\\static"
 
+[indexer]
+    siegfried = "http://localhost:5138/identify/[[PATH]]?format=json"
+
+
 [[filemap]]
     alias = "static"
     folder = "/mnt/daten/go/dev/zmedia/web/static"
