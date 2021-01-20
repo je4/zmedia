@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 type MediaHandler struct {
@@ -47,6 +48,18 @@ func NewMediaHandler(prefix string, mdb *database.MediaDatabase, idx *indexer.In
 
 var pathRegexp = regexp.MustCompile(`^([^:]+://[^/]+)/([^/]+)/(.+)$`)
 
+func (mh *MediaHandler) GetFS(path string) (filesystem.FileSystem, string, string, error) {
+	matches := pathRegexp.FindStringSubmatch(path)
+	if matches == nil {
+		return nil, "", "", fmt.Errorf("invalid path - cannot load file %s from storage", path)
+	}
+	fs, ok := mh.fss[matches[1]]
+	if !ok {
+		return nil, "", "", fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
+	}
+	return fs, matches[2], matches[3], nil
+}
+
 func (mh *MediaHandler) FileOpenRead(path string, opts filesystem.FileGetOptions) (io.ReadCloser, int64, error) {
 	matches := pathRegexp.FindStringSubmatch(path)
 	if matches == nil {
@@ -59,15 +72,11 @@ func (mh *MediaHandler) FileOpenRead(path string, opts filesystem.FileGetOptions
 	return fs.FileOpenRead(matches[2], matches[3], opts)
 }
 func (mh *MediaHandler) FileWrite(path string, reader io.Reader, size int64, opts filesystem.FilePutOptions) error {
-	matches := pathRegexp.FindStringSubmatch(path)
-	if matches == nil {
-		return fmt.Errorf("invalid path - cannot load file %s from storage", path)
+	fs, bucket, path, err := mh.GetFS(path)
+	if err != nil {
+		return err
 	}
-	fs, ok := mh.fss[matches[1]]
-	if !ok {
-		return fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
-	}
-	return fs.FileWrite(matches[2], matches[3], reader, size, opts)
+	return fs.FileWrite(bucket, path, reader, size, opts)
 }
 
 var errorTemplate = template.Must(template.New("error").Parse(`<html>
@@ -151,18 +160,31 @@ func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Ma
 	}
 	master.Sha256 = header.GetSHA256()
 
+	fs, bucket, path, err := mh.GetFS(filename)
+	if err != nil {
+		return nil, nil, err
+	}
+	urlstring, err := fs.GETUrl(bucket, path, 480*time.Second)
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot get url for %v/%v/%v", fs.String(), bucket, path)
+	}
+	width, height, duration, mimetype, sub, metadata, err := mh.idx.GetMetadata(urlstring.String(), master.Type, master.Subtype, master.Mimetype)
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot get metadata for %s", urlstring.String())
+	}
+
 	cache, err := database.NewCache(mh.mdb,
 		0,
 		coll.Id,
 		master.Id,
 		"master",
 		"",
-		master.Mimetype,
+		mimetype,
 		size,
 		filename,
-		0,
-		0,
-		0,
+		width,
+		height,
+		duration,
 	)
 	if err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot create cache %s", filename)
@@ -171,6 +193,13 @@ func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Ma
 	if err := cache.Store(); err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot store master cache for %s/%s", coll.Name, master.Signature)
 	}
+
+	metastr, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot marshal metadata - %v", metadata)
+	}
+	master.Metadata = metastr
+	master.Subtype = sub
 
 	if err := master.Store(); err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot store master %s", master.Signature)

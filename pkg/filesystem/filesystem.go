@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"time"
 )
 
 type NotFoundError struct {
@@ -41,7 +42,7 @@ type FolderCreateOptions struct {
 type FileSystem interface {
 	BucketExists(folder string) (bool, error)
 	BucketCreate(folder string, opts FolderCreateOptions) error
-	GETUrl(folder, name string) (*url.URL, error)
+	GETUrl(folder, name string, valid time.Duration) (*url.URL, error)
 	FileExists(folder, name string) (bool, error)
 	FileGet(folder, name string, opts FileGetOptions) ([]byte, error)
 	FilePut(folder, name string, data []byte, opts FilePutOptions) error

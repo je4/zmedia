@@ -18,7 +18,9 @@ staticfolder = "C:\\daten\\go\\dev\\zmedia\\web\\static"
 
 [indexer]
     siegfried = "http://localhost:5138/identify/[[PATH]]?format=json"
-
+    identtimeout = "10s"
+    convert = "/usr/local/bin/convert"
+    identify = "/usr/local/bin/identify"
 
 [[filemap]]
     alias = "static"

@@ -440,7 +440,7 @@ func (db *PostgresDB) StoreMaster(mdb *MediaDatabase, master *Master) error {
 		master.Id = masterid
 	} else {
 		sqlstr := fmt.Sprintf("UPDATE %s.master SET collectionid=$1, signature=$2, urn=$3, type=$4, subtype=$5,"+
-			" objecttype=$6, status=$7, parentid=$8, mimetype=$9, error=$10, sha256=$11, metadata=$12 WHERE masterid=$6", db.schema)
+			" objecttype=$6, status=$7, parentid=$8, mimetype=$9, error=$10, sha256=$11, metadata=$12 WHERE masterid=$13", db.schema)
 		sqlparams := []interface{}{
 			master.CollectionId,
 			master.Signature,

@@ -112,7 +112,7 @@ func main() {
 		return
 	}
 
-	idx, err := indexer.NewIndexer(config.Indexer.Siegfried, config.Indexer.FFProbe, "")
+	idx, err := indexer.NewIndexer(config.Indexer.Siegfried, config.Indexer.FFProbe, config.Indexer.Identify, config.Indexer.IdentTimeout.Duration, "")
 	if err != nil {
 		log.Errorf("cannot instantiate indexer: %v", err)
 		return

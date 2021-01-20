@@ -67,8 +67,11 @@ type SSHTunnel struct {
 }
 
 type Indexer struct {
-	Siegfried string `toml:"siegfried"`
-	FFProbe   string `toml:"ffprobe"`
+	Siegfried    string   `toml:"siegfried"`
+	FFProbe      string   `toml:"ffprobe"`
+	IdentTimeout duration `toml:"identtimeout"`
+	Convert      string   `toml:"convert"`
+	Identify     string   `toml:"identify"`
 }
 
 type Config struct {

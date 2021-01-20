@@ -59,9 +59,9 @@ func (fs *S3Fs) FileStat(folder, name string, opts FileStatOptions) (os.FileInfo
 	return NewS3FileInfo(folder, name, sinfo), nil
 }
 
-func (fs *S3Fs) GETUrl(folder, name string) (*url.URL, error) {
+func (fs *S3Fs) GETUrl(folder, name string, valid time.Duration) (*url.URL, error) {
 	reqParams := make(url.Values)
-	return fs.s3.PresignedGetObject(context.Background(), folder, name, time.Second*80, reqParams)
+	return fs.s3.PresignedGetObject(context.Background(), folder, name, valid, reqParams)
 }
 
 func (fs *S3Fs) FileExists(folder, name string) (bool, error) {

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type LocalFs struct {
@@ -62,8 +63,8 @@ func (fs *LocalFs) BucketExists(folder string) (bool, error) {
 	return FolderExists(filepath.Join(fs.basepath, folder)), nil
 }
 
-func (fs *LocalFs) GETUrl(folder, name string) (*url.URL, error) {
-	path := filepath.Join(fs.basepath, folder)
+func (fs *LocalFs) GETUrl(folder, name string, valid time.Duration) (*url.URL, error) {
+	path := filepath.Join(fs.basepath, folder, name)
 	return url.Parse(path)
 }
 
