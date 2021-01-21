@@ -6,7 +6,6 @@ import (
 	"flag"
 	"github.com/je4/zmedia/v2/pkg/database"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
-	"github.com/je4/zmedia/v2/pkg/indexer"
 	"github.com/je4/zmedia/v2/pkg/mediaserver"
 	sshtunnel "github.com/je4/zmedia/v2/pkg/sshTunnel"
 	_ "github.com/lib/pq"
@@ -112,7 +111,15 @@ func main() {
 		return
 	}
 
-	idx, err := indexer.NewIndexer(config.Indexer.Siegfried, config.Indexer.FFProbe, config.Indexer.Identify, config.Indexer.IdentTimeout.Duration, "")
+	idx, err := mediaserver.NewIndexer(
+		nil,
+		config.Indexer.Siegfried,
+		config.Indexer.FFProbe,
+		config.Indexer.Identify,
+		config.Indexer.Convert,
+		config.Indexer.IdentTimeout.Duration,
+		"",
+	)
 	if err != nil {
 		log.Errorf("cannot instantiate indexer: %v", err)
 		return

@@ -8,7 +8,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/je4/zmedia/v2/pkg/database"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
-	"github.com/je4/zmedia/v2/pkg/indexer"
 	"github.com/op/go-logging"
 	"html/template"
 	"io"
@@ -17,7 +16,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 )
 
 type MediaHandler struct {
@@ -25,14 +23,14 @@ type MediaHandler struct {
 	mdb    *database.MediaDatabase
 	fss    map[string]filesystem.FileSystem
 	prefix string
-	idx    *indexer.Indexer
+	idx    *Indexer
 }
 
 func buildFilename(coll *database.Collection, master *database.Master, action string, params []string) string {
 	return fmt.Sprintf("%v.%v-%x", coll.Id, master.Id, md5.Sum([]byte(fmt.Sprintf("%s/%s/%s/%s", coll.Name, master.Signature, action, strings.Join(params, "/")))))
 }
 
-func NewMediaHandler(prefix string, mdb *database.MediaDatabase, idx *indexer.Indexer, log *logging.Logger, fss ...filesystem.FileSystem) (*MediaHandler, error) {
+func NewMediaHandler(prefix string, mdb *database.MediaDatabase, idx *Indexer, log *logging.Logger, fss ...filesystem.FileSystem) (*MediaHandler, error) {
 	mh := &MediaHandler{
 		log:    log,
 		prefix: prefix,
@@ -40,6 +38,7 @@ func NewMediaHandler(prefix string, mdb *database.MediaDatabase, idx *indexer.In
 		fss:    make(map[string]filesystem.FileSystem),
 		idx:    idx,
 	}
+	mh.idx.SetMediaHandler(mh)
 	for _, fs := range fss {
 		mh.fss[fs.Protocol()] = fs
 	}
@@ -143,7 +142,7 @@ func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Ma
 	if err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot open master %s", master.Urn)
 	}
-	header, err := indexer.NewSideStream(2048)
+	header, err := NewSideStream(2048)
 	if err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot create sidestream %s", master.Urn)
 	}
@@ -160,17 +159,19 @@ func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Ma
 	}
 	master.Sha256 = header.GetSHA256()
 
-	fs, bucket, path, err := mh.GetFS(filename)
+	/*
+		fs, bucket, path, err := mh.GetFS(filename)
+		if err != nil {
+			return nil, nil, err
+		}
+		urlstring, err := fs.GETUrl(bucket, path, 480*time.Second)
+		if err != nil {
+			return nil, nil, emperror.Wrapf(err, "cannot get url for %v/%v/%v", fs.String(), bucket, path)
+		}
+	*/
+	width, height, duration, mimetype, sub, metadata, err := mh.idx.GetMetadata(filename, master.Type, master.Subtype, master.Mimetype)
 	if err != nil {
-		return nil, nil, err
-	}
-	urlstring, err := fs.GETUrl(bucket, path, 480*time.Second)
-	if err != nil {
-		return nil, nil, emperror.Wrapf(err, "cannot get url for %v/%v/%v", fs.String(), bucket, path)
-	}
-	width, height, duration, mimetype, sub, metadata, err := mh.idx.GetMetadata(urlstring.String(), master.Type, master.Subtype, master.Mimetype)
-	if err != nil {
-		return nil, nil, emperror.Wrapf(err, "cannot get metadata for %s", urlstring.String())
+		return nil, nil, emperror.Wrapf(err, "cannot get metadata for %s", filename)
 	}
 
 	cache, err := database.NewCache(mh.mdb,
@@ -194,11 +195,7 @@ func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Ma
 		return nil, nil, emperror.Wrapf(err, "cannot store master cache for %s/%s", coll.Name, master.Signature)
 	}
 
-	metastr, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return nil, nil, emperror.Wrapf(err, "cannot marshal metadata - %v", metadata)
-	}
-	master.Metadata = metastr
+	master.Metadata = metadata
 	master.Subtype = sub
 
 	if err := master.Store(); err != nil {
