@@ -18,6 +18,7 @@ package main
 import (
 	"github.com/BurntSushi/toml"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -98,6 +99,8 @@ type Config struct {
 	S3                 []Cfg_S3     `toml:"s3"`
 	SSHTunnel          SSHTunnel    `toml:"sshtunnel"`
 	Indexer            Indexer      `toml:"indexer"`
+	Tempdir            string       `toml:"tempdir"`
+	Tempsize           int64        `toml:"tempsize"`
 }
 
 func LoadConfig(fp string) Config {
@@ -107,6 +110,9 @@ func LoadConfig(fp string) Config {
 		log.Fatalln("Error on loading config: ", err)
 	}
 	//fmt.Sprintf("%v", m)
+	if conf.Tempdir == "" {
+		conf.Tempdir = os.TempDir()
+	}
 	conf.DataPrefix = strings.Trim(conf.DataPrefix, "/")
 	conf.MediaPrefix = strings.Trim(conf.MediaPrefix, "/")
 	conf.StaticPrefix = strings.Trim(conf.StaticPrefix, "/")

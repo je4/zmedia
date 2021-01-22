@@ -14,7 +14,9 @@ linktokenexp = "1h"
 prefix = "/media"
 staticprefix = "/static"
 mediaprefix = "/media"
-staticfolder = "C:\\daten\\go\\dev\\zmedia\\web\\static"
+tempdir = "file://temp/zmedia"
+tempsize = 260046848
+staticfolder = "/mnt/daten/go/dev/zmedia/web/static"
 
 [indexer]
     siegfried = "http://localhost:5138/identify/[[PATH]]?format=json"
@@ -25,6 +27,17 @@ staticfolder = "C:\\daten\\go\\dev\\zmedia\\web\\static"
 [[filemap]]
     alias = "static"
     folder = "/mnt/daten/go/dev/zmedia/web/static"
+
+[[filemap]]
+    alias = "temp"
+    folder = "/tmp"
+
+[[s3]]
+    name = "hgk"
+    endpoint = "minio.campusderkuenste.ch"
+    accessKeyId = "media"
+    secretAccessKey = "DzqApK0rK7tRlbKlBG2JymDJeHvPMfOd"
+    useSSL = true
 
 [dbold]
     servertype = "mysql"
@@ -39,13 +52,6 @@ staticfolder = "C:\\daten\\go\\dev\\zmedia\\web\\static"
     connection_max = 5000
     schema = "public"
 
-
-[[s3]]
-    name = "hgk"
-    endpoint = "minio.campusderkuenste.ch"
-    accessKeyId = "media"
-    secretAccessKey = "DzqApK0rK7tRlbKlBG2JymDJeHvPMfOd"
-    useSSL = true
 
 [sshtunnel]
     user = "root"

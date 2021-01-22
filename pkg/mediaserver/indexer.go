@@ -2,7 +2,7 @@ package mediaserver
 
 import (
 	"github.com/goph/emperror"
-	"io/ioutil"
+	"io"
 	"mime"
 	"net/http"
 	"os"
@@ -41,11 +41,10 @@ type Indexer struct {
 	Siegfried    *Siegfried
 	identify     *ImagickIdentify
 	identTimeout time.Duration
-	tempfolder   string
 	mh           *MediaHandler
 }
 
-func NewIndexer(mh *MediaHandler, siegfriedurl, ffprobe, identify, convert string, identTimeout time.Duration, tempfolder string) (*Indexer, error) {
+func NewIndexer(mh *MediaHandler, siegfriedurl, ffprobe, identify, convert string, identTimeout time.Duration) (*Indexer, error) {
 	ffp, err := NewFFProbe(mh, ffprobe)
 	if err != nil {
 		return nil, emperror.Wrapf(err, "cannot instantiate ffprobe %s", ffprobe)
@@ -64,7 +63,6 @@ func NewIndexer(mh *MediaHandler, siegfriedurl, ffprobe, identify, convert strin
 		Siegfried:    sf,
 		identify:     i,
 		identTimeout: identTimeout,
-		tempfolder:   tempfolder,
 	}
 	return idx, nil
 }
@@ -78,39 +76,72 @@ func (idx *Indexer) SetMediaHandler(mh *MediaHandler) {
 	idx.ffProbe.SetMediaHandler(mh)
 }
 
-func (idx *Indexer) GetImageMetadata(filename string) (width, height, duration int64, mimetype, sub string, metadata interface{}, err error) {
-	return idx.identify.GetMetadata(filename, idx.identTimeout)
+func (idx *Indexer) GetImageMetadata(filename string) (width, height, duration int64, mimetype, sub string, metadata map[string]interface{}, err error) {
+	var result = make(map[string]interface{})
+	width, height, duration, mimetype, sub, result["identify"], err = idx.identify.GetMetadata(filename, idx.identTimeout)
+	metadata = result
+	return
 }
 
-func (idx *Indexer) GetType(p []byte) (_type, subtype, mimetype string, err error) {
-	f, err := ioutil.TempFile(idx.tempfolder, "indexer-")
-	if err != nil {
-		return "", "", "", emperror.Wrap(err, "cannot create temp file")
+func (idx *Indexer) GetVideoMetadata(filename string) (width, height, duration int64, mimetype, sub string, metadata map[string]interface{}, err error) {
+	var result = make(map[string]interface{})
+	width, height, duration, mimetype, sub, result["ffprobe"], err = idx.ffProbe.GetMetadata(filename, idx.identTimeout)
+	metadata = result
+	return
+}
+
+func (idx *Indexer) GetMetadata(filename string, _type, subtype, mimetype string) (width, height, duration int64, _mimetype, sub string, metadata map[string]interface{}, err error) {
+	var m string
+
+	switch _type {
+	case "image":
+		width, height, duration, m, sub, metadata, err = idx.GetImageMetadata(filename)
+	case "video":
+		width, height, duration, m, sub, metadata, err = idx.GetVideoMetadata(filename)
+	default:
+		err = emperror.Wrapf(err, "invalid type %s", _type)
+		return
 	}
-	filename := f.Name()
-	if _, err := f.Write(p); err != nil {
+	if MimeRelevance(m) > MimeRelevance(mimetype) {
+		_mimetype = m
+	} else {
+		_mimetype = mimetype
+	}
+	return
+}
+
+func (idx *Indexer) GetType(filename string) (_type, subtype, mimetype string, metadata map[string]interface{}, err error) {
+	var p = make([]byte, 1024)
+	f, err := os.Open(filename)
+	if err != nil {
+		err = emperror.Wrapf(err, "cannot open %s", filename)
+		return
+	}
+	if _, err = io.ReadFull(f, p); err != nil {
 		f.Close()
-		return "", "", "", emperror.Wrap(err, "cannot write temp file")
+		err = emperror.Wrapf(err, "cannot read %s", filename)
+		return
 	}
 	f.Close()
-	defer os.Remove(filename)
 
+	metadata = make(map[string]interface{})
 	mediatype := http.DetectContentType(p)
 	mimetype, _, err = mime.ParseMediaType(mediatype)
 	if err != nil {
-		return "", "", "", emperror.Wrapf(err, "cannot parse media type %s", mediatype)
+		return "", "", "", nil, emperror.Wrapf(err, "cannot parse media type %s", mediatype)
 	}
+	metadata["httpdetect"] = mimetype
 
 	var mime1, mime2 string
-
 	matches := regexpMime.FindStringSubmatch(mimetype)
 	if matches != nil {
 		mime1, mime2 = matches[1], matches[2]
 	}
 	sf, err := idx.Siegfried.Identify(filename)
 	if err != nil {
-		return "", "", "", emperror.Wrapf(err, "cannot identiy file %s", filename)
+		return "", "", "", nil, emperror.Wrapf(err, "cannot identiy file %s", filename)
 	}
+	metadata["siegfried"] = sf
 
 	rel := MimeRelevance(mimetype)
 	for _, file := range sf.Files {
@@ -125,30 +156,9 @@ func (idx *Indexer) GetType(p []byte) (_type, subtype, mimetype string, err erro
 			}
 		}
 	}
-	_type, subtype = mime1, mime2
+	_type, subtype = mime1, strings.ToLower(mime2)
 	if mime1 == "application" && mime2 == "pdf" {
 		_type, subtype = "text", "pdf"
-	}
-
-	return
-}
-
-func (idx *Indexer) GetMetadata(filename string, _type, subtype, mimetype string) (width, height, duration int64, _mimetype, sub string, metadata interface{}, err error) {
-	var m string
-
-todo:
-	return structure
-
-	switch _type {
-	case "image":
-		width, height, duration, m, sub, metadata, err = idx.GetImageMetadata(filename)
-	default:
-		err = emperror.Wrapf(err, "invalid type %s", _type)
-	}
-	if MimeRelevance(m) > MimeRelevance(mimetype) {
-		_mimetype = m
-	} else {
-		_mimetype = mimetype
 	}
 	return
 }

@@ -118,7 +118,6 @@ func main() {
 		config.Indexer.Identify,
 		config.Indexer.Convert,
 		config.Indexer.IdentTimeout.Duration,
-		"",
 	)
 	if err != nil {
 		log.Errorf("cannot instantiate indexer: %v", err)
@@ -149,41 +148,7 @@ func main() {
 		return
 	}
 
-	/*
-		stor, err := mdb.CreateStorage("test", "s3://hgk", "")
-		if err != nil {
-			log.Panicf("cannot create storage: %v", err)
-			return
-		}
-
-		est, err := mdb.CreateEstate("test", "lorem ipsum dolor sit amet")
-		if err != nil {
-			log.Panicf("cannot create estate: %v", err)
-			return
-		}
-
-		coll, err := mdb.CreateCollection("test", est, stor, "test-", "testing 123", 0)
-		if err != nil {
-			log.Panicf("cannot create collection: %v", err)
-			return
-		}
-	*/
-	/*
-		coll, err := mdb.GetCollectionByName("test")
-		if err != nil {
-			log.Panicf("cannot load collection: %v", err)
-			return
-		}
-
-		master, err := mdb.CreateMaster(coll, "testing", "file://test/test.png", nil)
-		if err != nil {
-			log.Panicf("cannot create master: %v", err)
-			return
-		}
-		log.Infof("%v", master)
-	*/
-
-	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix, mdb, idx, log, fss...)
+	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix, mdb, idx, config.Tempdir, log, fss...)
 	if err != nil {
 		log.Errorf("cannot create media handler: %v", mh)
 		return

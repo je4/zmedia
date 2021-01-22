@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"github.com/goph/emperror"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
+	"io"
+	"net/url"
 	"os/exec"
 	"strings"
 	"time"
@@ -31,36 +33,66 @@ func (ii *ImagickIdentify) GetMetadata(filename string, timeout time.Duration) (
 	var md = make(map[string]interface{})
 	var metadataInt interface{}
 
-	// {"width":%w,"height":%h,"images":%n,"magick":"%m","orientation":"%[orientation]"}
-	cmdparam := []string{
-		"-",
-		"json:-",
-	}
-
 	fs, bucket, path, err := ii.mh.GetFS(filename)
 	if err != nil {
 		err = emperror.Wrapf(err, "cannot get filesystem for %s", filename)
 		return
 	}
 
-	reader, _, err := fs.FileOpenRead(bucket, path, filesystem.FileGetOptions{})
-	defer reader.Close()
-	var out, errb bytes.Buffer
-	out.Grow(1024 * 1024) // 1MB size
-	errb.Grow(1024 * 1024)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, ii.convert, cmdparam...)
-	cmd.Stdin = reader
-	cmd.Stdout = &out
-	cmd.Stderr = &errb
+	var out bytes.Buffer
 
-	err = cmd.Run()
-	if err != nil {
-		err = emperror.Wrapf(err, "error executing (%s %s): %v - %v", ii.identify, cmdparam, out.String(), errb.String())
-		return
+	if fs.IsLocal() {
+		var u *url.URL
+		u, err = fs.GETUrl(bucket, path, time.Second*120)
+		if err != nil {
+			err = emperror.Wrapf(err, "cannot get url for %s", filename)
+			return
+		}
+		cmdparam := []string{
+			u.Path,
+			"json:-",
+		}
+
+		var errb bytes.Buffer
+		out.Grow(1024 * 1024) // 1MB size
+		errb.Grow(1024 * 1024)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, ii.convert, cmdparam...)
+		cmd.Stdout = &out
+		cmd.Stderr = &errb
+
+		err = cmd.Run()
+		if err != nil {
+			err = emperror.Wrapf(err, "error executing (%s %s): %v - %v", ii.identify, cmdparam, out.String(), errb.String())
+			return
+		}
+	} else {
+		var reader io.ReadCloser
+		reader, _, err = fs.FileOpenRead(bucket, path, filesystem.FileGetOptions{})
+		defer reader.Close()
+
+		cmdparam := []string{
+			"-",
+			"json:-",
+		}
+
+		var errb bytes.Buffer
+		out.Grow(1024 * 1024) // 1MB size
+		errb.Grow(1024 * 1024)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, ii.convert, cmdparam...)
+		cmd.Stdin = reader
+		cmd.Stdout = &out
+		cmd.Stderr = &errb
+
+		err = cmd.Run()
+		if err != nil {
+			err = emperror.Wrapf(err, "error executing (%s %s): %v - %v", ii.identify, cmdparam, out.String(), errb.String())
+			return
+		}
 	}
-
 	if err = json.Unmarshal([]byte(out.String()), &metadataInt); err != nil {
 		err = emperror.Wrapf(err, "cannot unmarshall metadata: %s", out.String())
 		return

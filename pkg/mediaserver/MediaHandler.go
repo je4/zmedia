@@ -19,18 +19,19 @@ import (
 )
 
 type MediaHandler struct {
-	log    *logging.Logger
-	mdb    *database.MediaDatabase
-	fss    map[string]filesystem.FileSystem
-	prefix string
-	idx    *Indexer
+	log        *logging.Logger
+	mdb        *database.MediaDatabase
+	fss        map[string]filesystem.FileSystem
+	prefix     string
+	idx        *Indexer
+	tempfolder string
 }
 
 func buildFilename(coll *database.Collection, master *database.Master, action string, params []string) string {
 	return fmt.Sprintf("%v.%v-%x", coll.Id, master.Id, md5.Sum([]byte(fmt.Sprintf("%s/%s/%s/%s", coll.Name, master.Signature, action, strings.Join(params, "/")))))
 }
 
-func NewMediaHandler(prefix string, mdb *database.MediaDatabase, idx *Indexer, log *logging.Logger, fss ...filesystem.FileSystem) (*MediaHandler, error) {
+func NewMediaHandler(prefix string, mdb *database.MediaDatabase, idx *Indexer, tempdir string, log *logging.Logger, fss ...filesystem.FileSystem) (*MediaHandler, error) {
 	mh := &MediaHandler{
 		log:    log,
 		prefix: prefix,
@@ -42,10 +43,24 @@ func NewMediaHandler(prefix string, mdb *database.MediaDatabase, idx *Indexer, l
 	for _, fs := range fss {
 		mh.fss[fs.Protocol()] = fs
 	}
+
+	fs, bucket, path, err := mh.GetFS(tempdir)
+	if err != nil {
+		return nil, emperror.Wrapf(err, "cannot interpret tempdir %s", tempdir)
+	}
+	if !fs.IsLocal() {
+		return nil, fmt.Errorf("temp folder %s not local", tempdir)
+	}
+	url, err := fs.GETUrl(bucket, path, 0)
+	if err != nil {
+		return nil, emperror.Wrapf(err, "cannot get url of tempdir %s", tempdir)
+	}
+	mh.tempfolder = url.Path
+
 	return mh, nil
 }
 
-var pathRegexp = regexp.MustCompile(`^([^:]+://[^/]+)/([^/]+)/(.+)$`)
+var pathRegexp = regexp.MustCompile(`^([^:]+://[^/]+)/([^/]+)(/.+)?$`)
 
 func (mh *MediaHandler) GetFS(path string) (filesystem.FileSystem, string, string, error) {
 	matches := pathRegexp.FindStringSubmatch(path)
@@ -56,7 +71,7 @@ func (mh *MediaHandler) GetFS(path string) (filesystem.FileSystem, string, strin
 	if !ok {
 		return nil, "", "", fmt.Errorf("invalid protocol - cannot find storage %s", matches[1])
 	}
-	return fs, matches[2], matches[3], nil
+	return fs, matches[2], strings.TrimLeft(matches[3], "/"), nil
 }
 
 func (mh *MediaHandler) FileOpenRead(path string, opts filesystem.FileGetOptions) (io.ReadCloser, int64, error) {
@@ -142,36 +157,35 @@ func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Ma
 	if err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot open master %s", master.Urn)
 	}
-	header, err := NewSideStream(2048)
+	header, err := NewSideStream(mh.tempfolder, 2048)
 	if err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot create sidestream %s", master.Urn)
 	}
+	tempfile, err := header.Open()
+	if err != nil {
+		return nil, nil, emperror.Wrapf(err, "cannot open temp file in %s", mh.tempfolder)
+	}
+	defer header.Clear()
 	newreader := io.TeeReader(reader, header)
 	if err := mh.FileWrite(filename, newreader, size, filesystem.FilePutOptions{}); err != nil {
 		reader.Close()
 		return nil, nil, emperror.Wrapf(err, "cannot write cache/master %s", filename)
 	}
 	reader.Close()
-	p := header.GetBytes()
-	master.Type, master.Subtype, master.Mimetype, err = mh.idx.GetType(p)
+	header.Close()
+	var metadata = make(map[string]interface{})
+	master.Type, master.Subtype, master.Mimetype, metadata, err = mh.idx.GetType(tempfile)
 	if err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot get type for %s", filename)
 	}
 	master.Sha256 = header.GetSHA256()
 
-	/*
-		fs, bucket, path, err := mh.GetFS(filename)
-		if err != nil {
-			return nil, nil, err
-		}
-		urlstring, err := fs.GETUrl(bucket, path, 480*time.Second)
-		if err != nil {
-			return nil, nil, emperror.Wrapf(err, "cannot get url for %v/%v/%v", fs.String(), bucket, path)
-		}
-	*/
-	width, height, duration, mimetype, sub, metadata, err := mh.idx.GetMetadata(filename, master.Type, master.Subtype, master.Mimetype)
+	width, height, duration, mimetype, sub, meta, err := mh.idx.GetMetadata(filename, master.Type, master.Subtype, master.Mimetype)
 	if err != nil {
 		return nil, nil, emperror.Wrapf(err, "cannot get metadata for %s", filename)
+	}
+	for key, val := range meta {
+		metadata[key] = val
 	}
 
 	cache, err := database.NewCache(mh.mdb,
@@ -204,6 +218,24 @@ func (mh *MediaHandler) ingestMaster(collection, signature string) (*database.Ma
 	return master, cache, nil
 }
 
+func (mh *MediaHandler) GetCache(collection, signature, action, paramstr string) (*database.Cache, error) {
+	cache, err := mh.mdb.GetCache(collection, signature, action, paramstr)
+	if err == database.ErrNotFound {
+		if action == "master" {
+			master, cache, err := mh.ingestMaster(collection, signature)
+			if err != nil {
+				return nil, emperror.Wrapf(err, "cannot ingest master %s/%s", collection, signature)
+			}
+			mh.log.Infof("master: %v // %v", master, cache)
+			cache, err = mh.mdb.GetCache(collection, signature, action, paramstr)
+		}
+	}
+	if err != nil {
+		return nil, emperror.Wrapf(err, "cannot get cache for %s/%s/%s/%s", collection, signature, action, paramstr)
+	}
+	return cache, err
+}
+
 func (mh *MediaHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 
@@ -226,28 +258,15 @@ func (mh *MediaHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	params := strings.Split(strings.ToLower(paramstr), "/")
 	sort.Strings(params)
 
-	cache, err := mh.mdb.GetCache(collection, signature, action, paramstr)
-	// copy the file directly to the output
-	if err == nil {
+	cache, err := mh.GetCache(collection, signature, action, paramstr)
+	switch err {
+	case nil:
 		resp.Header().Set("Content-type", cache.Mimetype)
 		if err := mh.WriteFile(resp, cache.Path); err != nil {
 			mh.DoPanicf(resp, http.StatusInternalServerError, err.Error(), false)
 			return
 		}
 		return
-	}
-	if err == database.ErrNotFound {
-		master, cache, err := mh.ingestMaster(collection, signature)
-		if err != nil {
-			mh.DoPanicf(resp, http.StatusInternalServerError, "cannot ingest master %s/%s: %v", false, collection, signature, err)
-			return
-		}
-		mh.log.Infof("master: %v // %v", master, cache)
-	}
-	switch err {
-	case database.ErrNotFound:
-
-	case nil:
 	default:
 		mh.DoPanicf(resp, http.StatusBadRequest, "could not load cache for %s/%s/%s/%s", false, collection, signature, action, paramstr)
 		return

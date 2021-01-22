@@ -36,6 +36,8 @@ func NewS3Fs(name,
 	return &S3Fs{name: name, s3: s3, endpoint: endpoint}, nil
 }
 
+func (fs *S3Fs) IsLocal() bool { return false }
+
 func (fs *S3Fs) Protocol() string {
 	return fmt.Sprintf("s3://%s", fs.name)
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"github.com/goph/emperror"
 	"hash"
+	"io/ioutil"
+	"os"
 )
 
 type SideStream struct {
@@ -14,15 +16,47 @@ type SideStream struct {
 	pos        int
 	checksum   string
 	sha256Hash hash.Hash
+	tempfolder string
+	tempsize   int64
+	f          *os.File
+	tempfile   string
 }
 
-func NewSideStream(size int) (*SideStream, error) {
+func NewSideStream(tempfolder string, size int) (*SideStream, error) {
 	ss := &SideStream{
 		size:       size,
 		buffer:     bytes.Buffer{},
 		sha256Hash: sha256.New(),
+		tempfolder: tempfolder,
 	}
 	return ss, nil
+}
+
+func (ss *SideStream) Open() (string, error) {
+	var err error
+	ss.f, err = ioutil.TempFile(ss.tempfolder, "indexer-")
+	if err != nil {
+		return "", emperror.Wrap(err, "cannot create temp file")
+	}
+	ss.tempfile = ss.f.Name()
+	return ss.tempfile, nil
+}
+
+func (ss *SideStream) Close() {
+	if ss.f != nil {
+		ss.f.Close()
+		ss.f = nil
+	}
+}
+
+func (ss *SideStream) Clear() {
+	if ss.f != nil {
+		ss.f.Close()
+	}
+	if ss.tempfile != "" {
+		os.Remove(ss.tempfile)
+		ss.tempfile = ""
+	}
 }
 
 func (ss *SideStream) Write(p []byte) (n int, err error) {
@@ -35,9 +69,15 @@ func (ss *SideStream) Write(p []byte) (n int, err error) {
 	}
 	l := ss.size - ss.pos
 	if len(p) >= l {
-		n, err := ss.buffer.Write(p[0:l])
-		if err != nil {
-			return 0, emperror.Wrapf(err, "cannot write %v bytes", l)
+		if ss.f != nil {
+			if _, err := ss.f.Write(p); err != nil {
+				return 0, emperror.Wrapf(err, "cannot write tempfile %s", ss.tempfile)
+			}
+		} else {
+			n, err = ss.buffer.Write(p[0:l])
+			if err != nil {
+				return 0, emperror.Wrapf(err, "cannot write %v bytes", l)
+			}
 		}
 		ss.pos += n
 	} else {

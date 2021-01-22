@@ -52,4 +52,5 @@ type FileSystem interface {
 	FileStat(folder, name string, opts FileStatOptions) (os.FileInfo, error)
 	String() string
 	Protocol() string
+	IsLocal() bool
 }

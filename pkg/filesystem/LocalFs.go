@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -41,6 +42,8 @@ func NewLocalFs(name, basepath string, logger *logging.Logger) (*LocalFs, error)
 	return &LocalFs{name: name, basepath: basepath, logger: logger}, nil
 }
 
+func (fs *LocalFs) IsLocal() bool { return true }
+
 func (fs *LocalFs) Protocol() string {
 	return fmt.Sprintf("file://%s", fs.name)
 }
@@ -64,7 +67,7 @@ func (fs *LocalFs) BucketExists(folder string) (bool, error) {
 }
 
 func (fs *LocalFs) GETUrl(folder, name string, valid time.Duration) (*url.URL, error) {
-	path := filepath.Join(fs.basepath, folder, name)
+	path := "file:///" + filepath.Join(strings.TrimLeft(fs.basepath, "/"), folder, name)
 	return url.Parse(path)
 }
 
