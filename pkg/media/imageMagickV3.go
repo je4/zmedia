@@ -36,19 +36,16 @@ func (im *ImageMagickV3) LoadImage(reader io.Reader) error {
 	return nil
 }
 
-func (im *ImageMagickV3) StoreImage(format string, writer io.Writer) (*CoreMeta, error) {
+func (im *ImageMagickV3) StoreImage(format string) (io.Reader, *CoreMeta, error) {
+	var buf *bytes.Reader
 	if err := im.mw.SetFormat(format); err != nil {
-		return nil, emperror.Wrapf(err, "cannot set format %s", format)
+		return nil, nil, emperror.Wrapf(err, "cannot set format %s", format)
 	}
-	if im.frames > 1 {
 
-		if _, err := writer.Write(im.mw.GetImagesBlob()); err != nil {
-			return nil, emperror.Wrapf(err, "cannot write raw image data")
-		}
+	if im.frames > 1 {
+		buf = bytes.NewReader(im.mw.GetImagesBlob())
 	} else {
-		if _, err := writer.Write(im.mw.GetImageBlob()); err != nil {
-			return nil, emperror.Wrapf(err, "cannot write raw image data")
-		}
+		buf = bytes.NewReader(im.mw.GetImageBlob())
 	}
 
 	cm := &CoreMeta{
@@ -57,8 +54,9 @@ func (im *ImageMagickV3) StoreImage(format string, writer io.Writer) (*CoreMeta,
 		Duration: 0,
 		Format:   im.mw.GetFormat(),
 		Mimetype: "application/octet-stream",
+		Size:     buf.Size(),
 	}
-	return cm, nil
+	return buf, cm, nil
 }
 
 func (im *ImageMagickV3) Resize(options *ImageOptions) error {

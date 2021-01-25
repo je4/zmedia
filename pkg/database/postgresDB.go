@@ -572,7 +572,9 @@ func (db *PostgresDB) GetCacheByMaster(mdb *MediaDatabase, master *Master, actio
 		return nil, emperror.Wrapf(err, "cannot get collection from master #%v.%v", master.CollectionId, master.Id)
 	}
 
-	sqlstr := fmt.Sprintf("SELECT cacheid, storageid, collectionid, width, height, duration, mimetype, filesize, path FROM %s.cache WHERE masterid=$1, action=$2, param=$3", db.schema)
+	sqlstr := fmt.Sprintf("SELECT cacheid, storageid, collectionid, width, height, duration, mimetype, filesize, path"+
+		" FROM %s.cache"+
+		" WHERE masterid=$1 AND action=$2 AND param=$3", db.schema)
 	sqlparams := []interface{}{
 		master.Id,
 		action,

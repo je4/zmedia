@@ -279,6 +279,9 @@ func (db *MediaDatabase) GetCache(collection, signature, action string, paramstr
 	action = strings.ToLower(action)
 	lparams := []string{}
 	for _, param := range strings.Split(paramstr, "/") {
+		if param == "" {
+			continue
+		}
 		lparams = append(lparams, strings.ToLower(param))
 	}
 	sort.Strings(lparams)
@@ -290,6 +293,9 @@ func (db *MediaDatabase) GetCacheByMaster(master *Master, action string, paramst
 	action = strings.ToLower(action)
 	lparams := []string{}
 	for _, param := range strings.Split(paramstr, "/") {
+		if param == "" {
+			continue
+		}
 		lparams = append(lparams, strings.ToLower(param))
 	}
 	sort.Strings(lparams)

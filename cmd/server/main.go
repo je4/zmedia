@@ -6,6 +6,7 @@ import (
 	"flag"
 	"github.com/je4/zmedia/v2/pkg/database"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
+	"github.com/je4/zmedia/v2/pkg/media"
 	"github.com/je4/zmedia/v2/pkg/mediaserver"
 	sshtunnel "github.com/je4/zmedia/v2/pkg/sshTunnel"
 	_ "github.com/lib/pq"
@@ -148,7 +149,20 @@ func main() {
 		return
 	}
 
-	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix, mdb, idx, config.Tempdir, log, fss...)
+	var pbx = mediaserver.ParamBuilder{}
+	for _, action := range config.Actions {
+		pbx[action.Name] = action.Params
+	}
+
+	var actions = []media.Action{}
+	ia, err := media.NewImageAction()
+	if err != nil {
+		log.Panicf("cannot instantiate ImageAction: %v", err)
+		return
+	}
+	actions = append(actions, ia)
+
+	mh, err := mediaserver.NewMediaHandler(config.MediaPrefix, mdb, idx, pbx, config.Tempdir, log, fss, actions)
 	if err != nil {
 		log.Errorf("cannot create media handler: %v", mh)
 		return

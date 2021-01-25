@@ -5,11 +5,12 @@ import (
 	"github.com/goph/emperror"
 	"github.com/je4/zmedia/v2/pkg/filesystem"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
 type Storage struct {
-	fs           filesystem.FileSystem `json:"-"`
+	Fs           filesystem.FileSystem `json:"-"`
 	db           *MediaDatabase        `json:"-"`
 	FSType       string                `json:"fstype"`
 	Id           int64                 `json:"id"`
@@ -50,7 +51,7 @@ func NewStorage(mdb *MediaDatabase, id int64, name, filebase, datadir, videodir,
 
 	stor := &Storage{
 		db:           mdb,
-		fs:           fs,
+		Fs:           fs,
 		Id:           id,
 		FSType:       fs.String(),
 		Name:         name,
@@ -62,6 +63,16 @@ func NewStorage(mdb *MediaDatabase, id int64, name, filebase, datadir, videodir,
 		JWTKey:       jwtkey,
 	}
 	return stor, nil
+}
+
+var regexpBaseBucket = regexp.MustCompile(`://[^/]+/([^/]+)$`)
+
+func (s Storage) GetBucket() (string, error) {
+	matches := regexpBaseBucket.FindStringSubmatch(s.Filebase)
+	if matches == nil {
+		return "", fmt.Errorf("no bucket in filebase %s", s.Filebase)
+	}
+	return matches[1], nil
 }
 
 func (s Storage) Store() error {

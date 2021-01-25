@@ -166,7 +166,7 @@ func (fs *S3Fs) FileRead(folder, name string, w io.Writer, size int64, opts File
 	return nil
 }
 
-func (fs *S3Fs) FileOpenRead(folder, name string, opts FileGetOptions) (io.ReadCloser, int64, error) {
+func (fs *S3Fs) FileOpenRead(folder, name string, opts FileGetOptions) (ReadSeekerCloser, os.FileInfo, error) {
 	object, err := fs.s3.GetObject(
 		context.Background(),
 		folder,
@@ -174,11 +174,12 @@ func (fs *S3Fs) FileOpenRead(folder, name string, opts FileGetOptions) (io.ReadC
 		minio.GetObjectOptions{},
 	)
 	if err != nil {
-		return nil, 0, emperror.Wrapf(err, "cannot get object %v/%v", folder, name)
+		return nil, nil, emperror.Wrapf(err, "cannot get object %v/%v", folder, name)
 	}
 	oinfo, err := object.Stat()
 	if err != nil {
-		return nil, 0, emperror.Wrapf(err, "cannot get object info %v/%v", folder, name)
+		return nil, nil, emperror.Wrapf(err, "cannot get object info %v/%v", folder, name)
 	}
-	return object, oinfo.Size, nil
+	finfo := NewS3FileInfo(folder, name, oinfo)
+	return object, finfo, nil
 }

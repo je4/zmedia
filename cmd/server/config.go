@@ -75,6 +75,11 @@ type Indexer struct {
 	Identify     string   `toml:"identify"`
 }
 
+type Action struct {
+	Name   string
+	Params []string
+}
+
 type Config struct {
 	Logfile            string       `toml:"logfile"`
 	Loglevel           string       `toml:"loglevel"`
@@ -101,6 +106,7 @@ type Config struct {
 	Indexer            Indexer      `toml:"indexer"`
 	Tempdir            string       `toml:"tempdir"`
 	Tempsize           int64        `toml:"tempsize"`
+	Actions            []Action     `toml:"action"`
 }
 
 func LoadConfig(fp string) Config {

@@ -18,11 +18,21 @@ tempdir = "file://temp/zmedia"
 tempsize = 260046848
 staticfolder = "/mnt/daten/go/dev/zmedia/web/static"
 
+[[action]]
+    name = "master"
+    params = [ "metadata" ]
+
+[[action]]
+    name = "resize"
+    params = [ "size", "format", "stretch", "crop", "metadata", "backgroundblur", "extent" ]
+
+
 [indexer]
     siegfried = "http://localhost:5138/identify/[[PATH]]?format=json"
     identtimeout = "10s"
     convert = "/usr/local/bin/convert"
     identify = "/usr/local/bin/identify"
+
 
 [[filemap]]
     alias = "static"

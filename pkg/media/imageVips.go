@@ -1,6 +1,7 @@
 package media
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/davidbyttow/govips/v2/vips"
 	"github.com/goph/emperror"
@@ -85,7 +86,7 @@ func (it *ImageVips) LoadImage(reader io.Reader) error {
 	return nil
 }
 
-func (it *ImageVips) StoreImage(format string, writer io.Writer) (*CoreMeta, error) {
+func (it *ImageVips) StoreImage(format string) (io.Reader, *CoreMeta, error) {
 	var ep *vips.ExportParams
 	var mimetype string
 	switch format {
@@ -99,25 +100,21 @@ func (it *ImageVips) StoreImage(format string, writer io.Writer) (*CoreMeta, err
 		ep = vips.NewDefaultWEBPExportParams()
 		mimetype = "image/webp"
 	default:
-		return nil, fmt.Errorf("invalid format %s", format)
+		return nil, nil, fmt.Errorf("invalid format %s", format)
 	}
-	bytes, meta, err := it.image.Export(ep)
+	b, meta, err := it.image.Export(ep)
 	if err != nil {
-		return nil, emperror.Wrapf(err, "cannot export to %s", format)
+		return nil, nil, emperror.Wrapf(err, "cannot export to %s", format)
 	}
-	num, err := writer.Write(bytes)
-	if err != nil {
-		return nil, emperror.Wrapf(err, "cannot write data")
-	}
-	if num == 0 {
-		return nil, fmt.Errorf("zero bytes written")
-	}
+	var buf = bytes.NewReader(b)
+
 	cm := &CoreMeta{
 		Width:    int64(meta.Width),
 		Height:   int64(meta.Height),
 		Duration: 0,
 		Format:   format,
 		Mimetype: mimetype,
+		Size:     buf.Size(),
 	}
-	return cm, nil
+	return buf, cm, nil
 }

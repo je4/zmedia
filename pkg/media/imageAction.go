@@ -3,9 +3,10 @@ package media
 import (
 	"fmt"
 	"github.com/goph/emperror"
+	"github.com/je4/zmedia/v2/pkg/database"
+	"github.com/je4/zmedia/v2/pkg/filesystem"
 	"gopkg.in/gographics/imagick.v3/imagick"
 	"io"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -18,7 +19,7 @@ func (ia *ImageAction) GetType() string {
 
 type ImageType interface {
 	LoadImage(reader io.Reader) error
-	StoreImage(format string, writer io.Writer) (*CoreMeta, error)
+	StoreImage(format string) (io.Reader, *CoreMeta, error)
 	Resize(options *ImageOptions) error
 	Close()
 }
@@ -43,8 +44,7 @@ func (ia *ImageAction) Close() {
 	imagick.Terminate()
 }
 
-func (im *ImageMagickV3) GetType() string { return "image" }
-
+/*
 var imageParamRegexp = regexp.MustCompile(fmt.Sprintf(`^%s$`, strings.Join([]string{
 	`(size(?P<sizeWidth>[0-9]*)x(?P<sizeHeight>[0-9]*))`,
 	`(background(?P<background>(none|[0-9a-f]+)))`,
@@ -52,57 +52,65 @@ var imageParamRegexp = regexp.MustCompile(fmt.Sprintf(`^%s$`, strings.Join([]str
 	`(format(?P<format>jpeg|webp|png|gif|ptiff|jpeg2000))`,
 	`(overlay(?P<overlayCollection>[^-]+)-(?P<overlaySignature>.+))`,
 }, "|")))
+*/
 
-func buildOptions(params []string) (*ImageOptions, error) {
+func buildOptions(params map[string]string) (*ImageOptions, error) {
 	var err error
 	var io *ImageOptions = &ImageOptions{
 		ActionType:   "keep",
-		TargetFormat: "keep",
+		TargetFormat: "png",
 	}
 
-	for _, param := range params {
-		vals := FindStringSubmatch(imageParamRegexp, strings.ToLower(param))
-		for key, val := range vals {
-			if val == "" {
-				continue
+	for key, val := range params {
+		switch key {
+		case "background":
+			if val != "none" {
+				val = "#" + val
 			}
-			switch key {
-			case "background":
-				if val != "none" {
-					val = "#" + val
-				}
-				io.BackgroundColor = val
-			case "sizeWidth":
-				if io.Width, err = strconv.ParseInt(val, 10, 64); err != nil {
-					err = emperror.Wrapf(err, "cannot parse integer %s", val)
+			io.BackgroundColor = val
+		case "size":
+			sizes := strings.Split(val, "x")
+			if sizes[0] != "" {
+				if io.Width, err = strconv.ParseInt(sizes[0], 10, 64); err != nil {
+					err = emperror.Wrapf(err, "cannot parse width integer %s", val)
 					return nil, err
 				}
-			case "sizeHeight":
-				if io.Height, err = strconv.ParseInt(val, 10, 64); err != nil {
-					err = emperror.Wrapf(err, "cannot parse integer %s", val)
+			}
+			if sizes[1] != "" {
+				if io.Height, err = strconv.ParseInt(sizes[1], 10, 64); err != nil {
+					err = emperror.Wrapf(err, "cannot parse height integer %s", val)
 					return nil, err
 				}
-			case "resizeType":
-				io.ActionType = val
-			case "format":
-				io.TargetFormat = val
-			case "overlayCollection":
-				io.OverlayCollection = val
-			case "overlaySignature":
-				io.OverlaySignature = val
 			}
+		case "sizeWidth":
+			if io.Width, err = strconv.ParseInt(val, 10, 64); err != nil {
+				err = emperror.Wrapf(err, "cannot parse integer %s", val)
+				return nil, err
+			}
+		case "sizeHeight":
+			if io.Height, err = strconv.ParseInt(val, 10, 64); err != nil {
+				err = emperror.Wrapf(err, "cannot parse integer %s", val)
+				return nil, err
+			}
+		case "resizeType":
+			io.ActionType = val
+		case "format":
+			io.TargetFormat = val
+		case "overlayCollection":
+			io.OverlayCollection = val
+		case "overlaySignature":
+			io.OverlaySignature = val
 		}
 	}
-
 	return io, nil
 }
 
-func (ia *ImageAction) Do(meta *CoreMeta, action string, params []string, reader io.Reader, writer io.Writer) (*CoreMeta, error) {
+func (ia *ImageAction) Do(master *database.Master, action string, params map[string]string, bucket, path string, reader io.Reader) (*CoreMeta, error) {
 	var err error
 	var it ImageType
-	parts := strings.Split(strings.ToLower(meta.Mimetype), "/")
+	parts := strings.Split(strings.ToLower(master.Mimetype), "/")
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid mime type %s", meta.Mimetype)
+		return nil, fmt.Errorf("invalid mime type %s", master.Mimetype)
 	}
 	if parts[0] != "image" {
 		return nil, ErrInvalidType
@@ -113,7 +121,7 @@ func (ia *ImageAction) Do(meta *CoreMeta, action string, params []string, reader
 		return nil, emperror.Wrapf(err, "cannot build options from param %v", params)
 	}
 
-	switch meta.Mimetype {
+	switch master.Mimetype {
 	case "image/gif":
 		it, err = NewImageMagickV3(reader)
 	default:
@@ -146,9 +154,22 @@ func (ia *ImageAction) Do(meta *CoreMeta, action string, params []string, reader
 		return nil, fmt.Errorf("invalid action - %s", action)
 	}
 
-	cm, err := it.StoreImage(options.TargetFormat, writer)
+	reader, cm, err := it.StoreImage(options.TargetFormat)
 	if err != nil {
-		return nil, emperror.Wrapf(err, "cannot store image")
+		return nil, emperror.Wrapf(err, "cannot store image %v/%s", master.CollectionId, master.Signature)
 	}
+	coll, err := master.GetCollection()
+	if err != nil {
+		return nil, emperror.Wrapf(err, "cannot get collection of %v/%s", master.CollectionId, master.Signature)
+	}
+	stor, err := coll.GetStorage()
+	if err != nil {
+		return nil, emperror.Wrapf(err, "cannot get storage of collection %v", coll.Name)
+	}
+
+	if err := stor.Fs.FileWrite(bucket, path, reader, cm.Size, filesystem.FilePutOptions{}); err != nil {
+		return nil, emperror.Wrapf(err, "cannot write content to %s/%s/%s", stor.Fs.String(), bucket, path)
+	}
+
 	return cm, nil
 }
